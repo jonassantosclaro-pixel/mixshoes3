@@ -1,0 +1,103 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: products
+// Fields:
+//   - name: string (required)
+//   - cat: string (required)
+//   - price: number (required, positive)
+//   - priceOld: number (optional)
+//   - sizes: list of strings (required)
+//   - img: string (optional)
+//   - desc: string (optional)
+//   - stock: number (required)
+//   - vendas: number (optional)
+//   - novo: bool (optional)
+//   - createdAt: number (optional)
+//
+// Collection: orders
+// Fields:
+//   - data: string (required)
+//   - cliente: map { nome: string, telefone: string } (required)
+//   - itens: list of maps (required)
+//   - subtotal: number (required)
+//   - total: number (required)
+//   - status: string (required, enum)
+//   - frete: map { tipo: string, valor: number, prazo: string }
+//   - createdAt: serverTimestamp (required)
+//
+// Collection: config
+// Document: main
+// Fields:
+//   - whatsapp: string
+//   - instagram: string
+//   - facebook: string
+//   - storeName: string
+//   - address: string
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // Default admin and any user with 'admin' role in their profile
+      return isAuthenticated() && (
+        request.auth.token.email == "jonassantosclaro@gmail.com" && request.auth.token.email_verified == true ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
+      );
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'price', 'cat']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.price is number && data.price >= 0 &&
+             data.cat is string &&
+             (!('img' in data) || data.img is string) &&
+             (!('sizes' in data) || data.sizes is list);
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['cliente', 'itens', 'total', 'status']) &&
+             data.cliente is map && data.cliente.nome is string &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['Pendente', 'Pago', 'Enviado', 'Entregue', 'Cancelado'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Products are publicly readable, but only admins can write
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidProduct(request.resource.data);
+    }
+
+    // Orders are created by the public, but only admins can read/update all
+    match /orders/{orderId} {
+      allow create: if isValidOrder(request.resource.data);
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Config is publicly readable, but only admins can write
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // User profiles for checks
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId;
+    }
+  }
+}

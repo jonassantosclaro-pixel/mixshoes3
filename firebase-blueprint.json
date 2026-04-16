@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Represents a shoe or sports item for sale.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Product name" },
+        "cat": { "type": "string", "description": "Category (Masculino, Feminino, etc.)" },
+        "price": { "type": "number", "description": "Selling price" },
+        "priceOld": { "type": "number", "description": "Original price for discount display" },
+        "sizes": { "type": "array", "items": { "type": "string" }, "description": "Available numeric sizes" },
+        "img": { "type": "string", "description": "Image URL" },
+        "desc": { "type": "string", "description": "Product description" },
+        "stock": { "type": "number", "description": "Current quantity in stock" },
+        "vendas": { "type": "number", "description": "Total sales count" },
+        "novo": { "type": "boolean", "description": "Flag for new products" },
+        "createdAt": { "type": "number", "description": "Creation timestamp" }
+      },
+      "required": ["name", "price", "cat"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase records.",
+      "type": "object",
+      "properties": {
+        "data": { "type": "string", "description": "Formatted date string" },
+        "cliente": {
+          "type": "object",
+          "properties": {
+            "nome": { "type": "string" },
+            "telefone": { "type": "string" }
+          }
+        },
+        "itens": { "type": "array", "items": { "type": "object" } },
+        "subtotal": { "type": "number" },
+        "total": { "type": "number" },
+        "frete": {
+          "type": "object",
+          "properties": {
+            "tipo": { "type": "string" },
+            "valor": { "type": "number" },
+            "prazo": { "type": "string" }
+          }
+        },
+        "status": { "type": "string", "enum": ["Pendente", "Pago", "Enviado", "Entregue", "Cancelado"] },
+        "rastreio": { "type": "string" },
+        "origem": { "type": "string" },
+        "createdAt": { "type": "object" }
+      }
+    },
+    "Config": {
+      "title": "Store Config",
+      "description": "General store settings.",
+      "type": "object",
+      "properties": {
+        "whatsapp": { "type": "string" },
+        "instagram": { "type": "string" },
+        "facebook": { "type": "string" },
+        "storeName": { "type": "string" },
+        "address": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of available products."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Historical sales and customer inquiries."
+    },
+    "/config/main": {
+      "schema": "Config",
+      "description": "Main store configuration document."
+    }
+  }
+}

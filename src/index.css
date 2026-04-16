@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-cyan: #00C8FF;
+  --color-orange: #FF8C00;
+  --color-green: #25D366;
+  --color-red: #EF4444;
+  --color-bg: #050507;
+  --color-bg2: #0F1117;
+  --color-bg3: #151821;
+  --color-mid: #1A2030;
+  --color-border: #1F2937;
+  --color-white: #E5E7EB;
+  --color-muted: #9CA3AF;
+  
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-bebas: "Bebas Neue", cursive;
+}
+
