@@ -3,16 +3,17 @@ import {
   ShoppingCart, Settings, Search, Phone, Instagram, Facebook, 
   Trash2, Plus, Minus, Check, X, LogOut, LayoutDashboard, 
   Package, ShoppingBag, ClipboardList, Database, Globe,
-  ExternalLink, ArrowUpRight, Camera
+  ExternalLink, ArrowUpRight, Camera, Bot, Send, Sparkles, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI } from "@google/genai";
 import { 
   collection, onSnapshot, query, orderBy, limit, addDoc, 
   setDoc, doc, deleteDoc, serverTimestamp, getDoc, getDocs 
 } from 'firebase/firestore';
 import { 
   signInWithPopup, GoogleAuthProvider, onAuthStateChanged, 
-  signOut, User 
+  signOut, User, signInWithEmailAndPassword, createUserWithEmailAndPassword
 } from 'firebase/auth';
 import { db, auth } from './firebase';
 
@@ -137,6 +138,68 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+
+  // --- AI Assistant State ---
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model', content: string }[]>([
+    { role: 'model', content: 'Olá! Sou seu assistente MIX SHOES 👟 Como posso te ajudar hoje?' }
+  ]);
+  const [isTyping, setIsTyping] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const ai = useMemo(() => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' }), []);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (chatOpen) scrollToBottom();
+  }, [chatMessages, chatOpen]);
+
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim()) return;
+    
+    const newMessages = [...chatMessages, { role: 'user' as const, content: text }];
+    setChatMessages(newMessages);
+    setIsTyping(true);
+
+    try {
+      const prompt = `Você é um assistente virtual da loja MIX SHOES. 
+      Seu objetivo é ajudar clientes a encontrar produtos, tirar dúvidas e direcionar para os contatos oficiais.
+      
+      DADOS DA LOJA:
+      Nome: ${config.storeName}
+      Endereço: ${config.address}
+      WhatsApp: ${config.whatsapp}
+      Instagram: ${config.instagram}
+      Facebook: ${config.facebook}
+      
+      PRODUTOS DISPONÍVEIS:
+      ${products.map(p => `${p.name} - R$ ${p.price} (${p.cat})`).join('\n')}
+      
+      INSTRUÇÕES:
+      - Seja amigável e use emojis de tênis e moda.
+      - Se o cliente quiser comprar, direcione-o para adicionar ao carrinho ou para o WhatsApp.
+      - Responda de forma curta e objetiva.
+      - Nunca invente preços ou produtos que não estão na lista acima.
+      
+      MENSAGEM DO CLIENTE: ${text}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt
+      });
+
+      const aiText = response.text || "Desculpe, tive um problema técnico. Pode repetir?";
+      setChatMessages([...newMessages, { role: 'model', content: aiText }]);
+    } catch (error) {
+      console.error('AI Error:', error);
+      setChatMessages([...newMessages, { role: 'model', content: 'Ops! Estou um pouco ocupado agora, pode me chamar no WhatsApp? 📱' }]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
   
   // --- UI State ---
   const [currentFilter, setCurrentFilter] = useState('all');
@@ -406,9 +469,9 @@ export default function App() {
       {/* Topbar */}
       <div className="hidden sm:flex h-10 bg-[#0A0C10] border-b border-border items-center justify-between px-6 text-xs font-medium tracking-wide">
         <span className="text-muted">Mix Shoes — Qualidade e preços imbatíveis</span>
-        <a href={`https://wa.me/${config.whatsapp}`} target="_blank" className="text-green flex items-center gap-2 hover:text-white transition-colors">
-          <Phone size={14} fill="currentColor" />
-          {config.whatsapp}
+        <a href={`https://wa.me/${config.whatsapp.replace(/\D/g, '')}`} target="_blank" className="text-green flex items-center gap-2 hover:text-cyan transition-all group">
+          <MessageCircle size={14} className="fill-green group-hover:fill-cyan transition-all" />
+          <span className="font-bold tracking-widest">WhatsApp Oficial</span>
         </a>
       </div>
 
@@ -598,9 +661,9 @@ export default function App() {
               A melhor loja de calçados e moda esportiva de Sinop-MT e região. Qualidade garantida e envio para todo o país.
             </p>
             <div className="flex gap-4">
-              <a href={config.instagram} className="w-10 h-10 rounded-full bg-bg3 border border-border flex items-center justify-center hover:border-cyan hover:text-cyan transition-all"><Instagram size={18} /></a>
-              <a href={config.facebook} className="w-10 h-10 rounded-full bg-bg3 border border-border flex items-center justify-center hover:border-cyan hover:text-cyan transition-all"><Facebook size={18} /></a>
-              <a href={`https://wa.me/${config.whatsapp}`} className="w-10 h-10 rounded-full bg-bg3 border border-border flex items-center justify-center hover:border-cyan hover:text-cyan transition-all"><Phone size={18} /></a>
+              <a href={config.instagram} target="_blank" className="w-10 h-10 rounded-full bg-bg3 border border-border flex items-center justify-center hover:border-cyan hover:text-cyan transition-all"><Instagram size={18} /></a>
+              <a href={config.facebook} target="_blank" className="w-10 h-10 rounded-full bg-bg3 border border-border flex items-center justify-center hover:border-cyan hover:text-cyan transition-all"><Facebook size={18} /></a>
+              <a href={`https://wa.me/${config.whatsapp.replace(/\D/g, '')}`} target="_blank" className="w-10 h-10 rounded-full bg-bg3 border border-border flex items-center justify-center hover:border-cyan hover:text-cyan transition-all"><MessageCircle size={18} className="fill-green/20" /></a>
             </div>
           </div>
           
@@ -617,7 +680,11 @@ export default function App() {
             <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Contato</h4>
             <ul className="space-y-4 text-sm text-muted">
               <li className="flex gap-3">📍 <span>{config.address}</span></li>
-              <li className="flex gap-3">📱 <span>{config.whatsapp}</span></li>
+              <li className="flex gap-3">
+                <a href={`https://wa.me/${config.whatsapp.replace(/\D/g, '')}`} target="_blank" className="flex items-center gap-2 hover:text-cyan transition-colors">
+                  <MessageCircle size={16} className="text-green" /> WhatsApp: {config.whatsapp}
+                </a>
+              </li>
               <li className="flex gap-3">⏰ <span>Seg–Sáb: 8h às 20h</span></li>
             </ul>
           </div>
@@ -633,7 +700,114 @@ export default function App() {
           </div>
         </div>
 
-        <div className="max-w-[1400px] mx-auto px-6 pt-10 border-t border-border flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] text-muted uppercase tracking-[0.2em] font-bold">
+        {/* Floating Buttons */}
+      <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-4">
+        <a 
+          href={`https://wa.me/${config.whatsapp.replace(/\D/g, '')}`}
+          target="_blank"
+          className="w-16 h-16 bg-green text-white rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(34,197,94,0.4)] hover:scale-110 active:scale-95 transition-all group relative"
+        >
+          <MessageCircle size={32} className="fill-white/20" />
+          <span className="absolute right-full mr-4 bg-white text-black px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl">
+             Chamar no WhatsApp 📱
+          </span>
+        </a>
+
+        <button 
+          onClick={() => setChatOpen(!chatOpen)}
+          className="w-16 h-16 bg-cyan text-black rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(0,200,255,0.4)] hover:scale-110 active:scale-95 transition-all group relative"
+        >
+          {chatOpen ? <X size={32} /> : <Bot size={32} />}
+          <span className="absolute right-full mr-4 bg-white text-black px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl">
+             Assistente Virtual ✨
+          </span>
+        </button>
+      </div>
+
+      {/* AI Chat Layout */}
+      <AnimatePresence>
+        {chatOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-28 right-8 z-[101] w-[380px] h-[550px] bg-bg2 border border-border rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl"
+          >
+            <div className="bg-bg3 p-6 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-cyan/10 rounded-xl flex items-center justify-center text-cyan">
+                  <Bot size={24} />
+                </div>
+                <div>
+                  <div className="font-bebas text-xl tracking-wider">ASSISTENTE <span className="text-cyan text-[0.8em]">MIX</span></div>
+                  <div className="flex items-center gap-1.5 leading-none">
+                    <span className="w-1.5 h-1.5 bg-green rounded-full animate-pulse" />
+                    <span className="text-[10px] text-muted uppercase font-black">Online Agora</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="text-muted hover:text-white transition-colors"><X size={20} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {chatMessages.map((m, i) => (
+                <motion.div 
+                  initial={{ opacity: 0, x: m.role === 'user' ? 10 : -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  key={i} 
+                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${
+                    m.role === 'user' 
+                      ? 'bg-cyan text-black font-medium rounded-tr-none' 
+                      : 'bg-bg3 border border-border text-white rounded-tl-none leading-relaxed'
+                  }`}>
+                    {m.content}
+                  </div>
+                </motion.div>
+              ))}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-bg3 border border-border p-4 rounded-2xl rounded-tl-none flex gap-1">
+                    <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="p-6 bg-bg3 border-t border-border">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Pergunte sobre um tênis..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isTyping) {
+                      const val = (e.target as HTMLInputElement).value;
+                      handleSendMessage(val);
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                  }}
+                  className="w-full bg-bg border border-border rounded-2xl py-4 pl-6 pr-14 text-sm outline-none focus:border-cyan transition-all"
+                />
+                <button 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-cyan text-black rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all hover:bg-white"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+              <div className="mt-4 flex items-center justify-center gap-2 grayscale opacity-30 hover:grayscale-0 hover:opacity-100 transition-all cursor-default">
+                  <Sparkles size={12} className="text-cyan" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">IA AI STUDIO POWERED</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="max-w-[1400px] mx-auto px-6 pt-10 border-t border-border flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] text-muted uppercase tracking-[0.2em] font-bold">
           <span>© 2026 Mix Shoes. Todos os direitos reservados.</span>
           <button onClick={() => setIsAdminMode(true)} className="opacity-30 hover:opacity-100 transition-opacity">Área Administrativa</button>
         </div>
@@ -853,30 +1027,57 @@ export default function App() {
                     <input id="admU" type="text" placeholder="Usuário" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" defaultValue="mixshoes" />
                     <input id="admP" type="password" placeholder="Senha" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" defaultValue="adminmixshoes" />
                     <button 
-                      onClick={() => {
+                      onClick={async () => {
                         const u = (document.getElementById('admU') as HTMLInputElement).value;
                         const p = (document.getElementById('admP') as HTMLInputElement).value;
-                        if(u === 'mixshoes' && p === 'adminmixshoes') { setAdminPanelOpen(true); } else { showToast('❌ Incorreto'); }
+                        
+                        if(!u || !p) { showToast('⚠️ Digite usuário e senha'); return; }
+                        
+                        // Transform simple user to email for Firebase
+                        const email = u === 'mixshoes' ? 'admin@mixshoes.com' : `${u}@mixshoes.com`;
+                        
+                        showToast('🔐 Autenticando...');
+                        try {
+                          // Try log in
+                          await signInWithEmailAndPassword(auth, email, p);
+                          setAdminPanelOpen(true);
+                          showToast('✅ Acesso Liberado!');
+                        } catch(err: any) {
+                          console.error("Firebase Auth Error:", err.code, err.message);
+                          
+                          // Handle disabled provider
+                          if (err.code === 'auth/operation-not-allowed') {
+                            showToast('🚫 O login por E-mail/Senha deve ser ativado no Console!');
+                            return;
+                          }
+
+                          // If user not found, attempt to register (first access)
+                          if(err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+                            try {
+                               await createUserWithEmailAndPassword(auth, email, p);
+                               setAdminPanelOpen(true);
+                               showToast('✅ Conta Admin Criada e logada!');
+                            } catch(creationErr: any) {
+                               if (creationErr.code === 'auth/email-already-in-use') {
+                                 showToast('❌ Senha incorreta para este usuário');
+                               } else if (creationErr.code === 'auth/operation-not-allowed') {
+                                 showToast('🚀 Ative "E-mail/Senha" no Firebase Console!');
+                               } else if (creationErr.code === 'auth/weak-password') {
+                                 showToast('❌ Senha muito fraca (mínimo 6 caracteres)');
+                               } else {
+                                 showToast('❌ Erro: ' + creationErr.code);
+                               }
+                            }
+                          } else {
+                            showToast('❌ Erro de autenticação: ' + err.code);
+                          }
+                        }
                       }}
-                      className="w-full bg-cyan text-black py-4 rounded-2xl font-black text-sm uppercase tracking-widest"
+                      className="w-full bg-cyan text-black py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-cyan/20 active:scale-95 transition-all"
                     >
                       Acessar Painel
                     </button>
-                    <div className="pt-4 border-t border-border mt-4">
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const provider = new GoogleAuthProvider();
-                            await signInWithPopup(auth, provider);
-                            setAdminPanelOpen(true);
-                          } catch(e) { showToast('❌ Erro no login'); }
-                        }}
-                        className="w-full bg-white text-black py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2"
-                      >
-                         Entrar com Google
-                      </button>
-                    </div>
-                    <button onClick={() => setIsAdminMode(false)} className="text-muted text-xs underline">Voltar para Loja</button>
+                    <button onClick={() => setIsAdminMode(false)} className="text-muted text-xs underline mt-6">Voltar para Loja</button>
                   </div>
                </motion.div>
              ) : (
@@ -1001,8 +1202,12 @@ export default function App() {
                                        <button 
                                           onClick={async () => {
                                              if(confirm('🗑 Excluir este produto permanentemente?')) {
-                                               await deleteDoc(doc(db, 'products', p.id));
-                                               showToast('✅ Produto excluído');
+                                               try {
+                                                 await deleteDoc(doc(db, 'products', p.id));
+                                                 showToast('✅ Produto excluído');
+                                               } catch(e) {
+                                                  handleFirestoreError(e, OperationType.DELETE, `products/${p.id}`);
+                                               }
                                              }
                                           }}
                                           className="p-2.5 bg-bg border border-border rounded-xl text-muted hover:text-red transition-all"
@@ -1053,8 +1258,12 @@ export default function App() {
                                        <select 
                                          value={o.status} 
                                          onChange={async (e) => {
-                                            await setDoc(doc(db, 'orders', o.id), { ...o, status: e.target.value });
-                                            showToast('✅ Status atualizado');
+                                            try {
+                                              await setDoc(doc(db, 'orders', o.id), { ...o, status: e.target.value });
+                                              showToast('✅ Status atualizado');
+                                            } catch(err) {
+                                              handleFirestoreError(err, OperationType.UPDATE, `orders/${o.id}`);
+                                            }
                                          }}
                                          className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase border-none outline-none appearance-none cursor-pointer ${
                                             o.status === 'Pago' ? 'bg-green/10 text-green' : 
@@ -1073,8 +1282,12 @@ export default function App() {
                                          <button onClick={() => { setViewingOrder(o); setIsOrderModalOpen(true); }} className="p-2.5 bg-bg border border-border rounded-xl text-muted hover:text-cyan transition-all"><ExternalLink size={14} /></button>
                                          <button onClick={async () => {
                                            if(confirm('❌ Excluir registro do pedido?')) {
-                                             await deleteDoc(doc(db, 'orders', o.id));
-                                             showToast('🗑 Pedido removido');
+                                             try {
+                                               await deleteDoc(doc(db, 'orders', o.id));
+                                               showToast('🗑 Pedido removido');
+                                             } catch(err) {
+                                               handleFirestoreError(err, OperationType.DELETE, `orders/${o.id}`);
+                                             }
                                            }
                                          }} className="p-2.5 bg-bg border border-border rounded-xl text-muted hover:text-red transition-all"><Trash2 size={14} /></button>
                                        </div>
@@ -1152,6 +1365,10 @@ export default function App() {
                                         <button 
                                             disabled={cart.length === 0}
                                             onClick={async () => {
+                                                if(!auth.currentUser) {
+                                                    showToast('⚠️ Entre com Google para salvar');
+                                                    return;
+                                                }
                                                 // Real PDV logic: update stock in firebase
                                                 showToast('📦 Atualizando estoque...');
                                                 try {
@@ -1296,6 +1513,10 @@ export default function App() {
                             <motion.button 
                                 whileTap={{ scale: 0.95 }}
                                 onClick={async () => {
+                                    if(!auth.currentUser) {
+                                        showToast('⚠️ Entre com Google para salvar');
+                                        return;
+                                    }
                                     showToast('💾 Gravando no Firebase...');
                                     try {
                                         await setDoc(doc(db, 'config', 'main'), config);
@@ -1359,6 +1580,10 @@ export default function App() {
               </div>
               <button 
                 onClick={async () => {
+                   if(!auth.currentUser) {
+                      showToast('⚠️ Entre com Google para salvar no Firebase');
+                      return;
+                   }
                    const data = {
                       name: (document.getElementById('pName') as HTMLInputElement).value,
                       cat: (document.getElementById('pCat') as HTMLSelectElement).value,
@@ -1384,7 +1609,9 @@ export default function App() {
                      }
                      setIsProductModalOpen(false);
                      showToast('✅ Sucesso!');
-                   } catch(e) { showToast('❌ Erro no Firestore'); }
+                   } catch(e) { 
+                     handleFirestoreError(e, editingProduct ? OperationType.UPDATE : OperationType.CREATE, 'products');
+                   }
                 }}
                 className="w-full bg-cyan text-black py-5 rounded-2xl font-black text-sm uppercase tracking-widest mt-10 shadow-lg"
               >

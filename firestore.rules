@@ -50,20 +50,21 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Default admin and any user with 'admin' role in their profile
+      // Allow the specific user emails and any user with admin role in Firestore
       return isAuthenticated() && (
-        request.auth.token.email == "jonassantosclaro@gmail.com" && request.auth.token.email_verified == true ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
+        request.auth.token.email == "jonassantosclaro@gmail.com" ||
+        request.auth.token.email == "admin@mixshoes.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
       );
     }
 
     function isValidProduct(data) {
+      // Basic validation: must have name, price and category
       return data.keys().hasAll(['name', 'price', 'cat']) &&
-             data.name is string && data.name.size() < 100 &&
-             data.price is number && data.price >= 0 &&
-             data.cat is string &&
-             (!('img' in data) || data.img is string) &&
-             (!('sizes' in data) || data.sizes is list);
+             data.name is string && 
+             data.price is number && 
+             data.cat is string;
     }
 
     function isValidOrder(data) {
