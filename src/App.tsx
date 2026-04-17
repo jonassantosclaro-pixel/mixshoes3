@@ -3,7 +3,9 @@ import {
   ShoppingCart, Settings, Search, Phone, Instagram, Facebook, 
   Trash2, Plus, Minus, Check, X, LogOut, LayoutDashboard, 
   Package, ShoppingBag, ClipboardList, Database, Globe,
-  ExternalLink, ArrowUpRight, Camera, Bot, Send, Sparkles, MessageCircle
+  ExternalLink, ArrowUpRight, Camera, Bot, Send, Sparkles, MessageCircle,
+  Menu, ChevronRight, ChevronLeft, User as UserIcon,
+  Zap, Shirt, Activity, Baby
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
@@ -73,6 +75,7 @@ interface Product {
   id: string;
   name: string;
   cat: string;
+  gender: 'Masculino' | 'Feminino' | 'Unisex';
   price: number;
   priceOld: number;
   sizes: string[];
@@ -126,12 +129,66 @@ const DEFAULT_CONFIG: StoreConfig = {
 };
 
 const CATEGORIES = [
-  'Masculino', 'Feminino'
+  'Tênis', 'Chuteira', 'Chinelo', 'Camisa de Time', 'Conjunto Dryfit', 'Primeira Linha', 'Infantil'
 ];
+
+const GENDERS = ['Masculino', 'Feminino', 'Unisex'];
+
+// --- Components ---
+interface ProductCardProps {
+  p: Product;
+  addToCart: (p: Product, size: string, qty: number) => void;
+  setSelectedProduct: (p: Product) => void;
+  key?: any;
+}
+
+function ProductCard({ p, addToCart, setSelectedProduct }: ProductCardProps) {
+  return (
+    <motion.div 
+      layout
+      key={p.id}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      whileHover={{ y: -8 }}
+      className="group bg-bg2 border border-border rounded-2xl overflow-hidden cursor-pointer hover:border-cyan/30 hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all"
+      onClick={() => setSelectedProduct(p)}
+    >
+      <div className="aspect-square bg-bg3 relative overflow-hidden">
+        {p.novo && <div className="absolute top-3 left-3 bg-cyan text-black px-2.5 py-1 rounded-full text-[9px] font-black z-10">NOVO</div>}
+        {p.priceOld > 0 && (
+          <div className="absolute top-3 left-3 bg-orange text-black px-2.5 py-1 rounded-full text-[9px] font-black z-10">
+            -{Math.round((1 - p.price/p.priceOld) * 100)}%
+          </div>
+        )}
+        {p.img ? (
+          <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-4xl opacity-20">👟</div>
+        )}
+      </div>
+      <div className="p-4">
+        <div className="text-[10px] text-muted uppercase tracking-widest mb-1">{p.cat}</div>
+        <h3 className="font-bold text-sm mb-2 line-clamp-1">{p.name}</h3>
+        <div className="flex items-baseline gap-2 mb-4">
+          <span className="font-bebas text-2xl text-orange">R$ {p.price.toFixed(2)}</span>
+          {p.priceOld > 0 && <span className="text-muted text-xs line-through">R$ {p.priceOld.toFixed(2)}</span>}
+        </div>
+        <button 
+          onClick={(e) => { e.stopPropagation(); addToCart(p, p.sizes[0], 1); }}
+          className="w-full bg-cyan/10 border border-cyan/20 text-cyan py-2.5 rounded-xl font-bold text-xs hover:bg-cyan hover:text-black transition-all"
+        >
+          Adicionar 🛒
+        </button>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function App() {
   // --- Global State ---
   const [loading, setLoading] = useState(true);
+  const [minLoadingDone, setMinLoadingDone] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [config, setConfig] = useState<StoreConfig>(DEFAULT_CONFIG);
@@ -202,6 +259,7 @@ export default function App() {
   };
   
   // --- UI State ---
+  const [currentSection, setCurrentSection] = useState<'all' | 'Masculino' | 'Feminino'>('all');
   const [currentFilter, setCurrentFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -211,6 +269,10 @@ export default function App() {
   const [modalQty, setModalQty] = useState(1);
   const [toast, setToast] = useState<{msg: string, show: boolean}>({msg: '', show: false});
   const [scrolled, setScrolled] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuLevel, setMenuLevel] = useState(1);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [activeSubMenuId, setActiveSubMenuId] = useState<string | null>(null);
 
   // --- Shipping State ---
   const [cep, setCep] = useState('');
@@ -258,10 +320,35 @@ export default function App() {
       }
     });
 
+    const timer = setTimeout(() => {
+      setMinLoadingDone(true);
+    }, 6000);
+
+    // Check for public order parameter
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('order');
+    if (orderId) {
+      const getOrder = async () => {
+        try {
+          const snap = await getDoc(doc(db, 'orders', orderId));
+          if (snap.exists()) {
+            setViewingOrder({ id: snap.id, ...snap.data() } as Order);
+            setIsOrderModalOpen(true);
+          } else {
+            showToast('❌ Pedido não encontrado');
+          }
+        } catch (err) {
+          console.error("Error fetching public order:", err);
+        }
+      };
+      getOrder();
+    }
+
     return () => {
       unsubAuth();
       unsubProducts();
       unsubConfig();
+      clearTimeout(timer);
     };
   }, []);
 
@@ -299,12 +386,13 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
+      const matchesSection = currentSection === 'all' || p.gender === currentSection || p.gender === 'Unisex' || !p.gender;
       const matchesCat = currentFilter === 'all' || p.cat === currentFilter;
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             p.cat.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCat && matchesSearch;
+      return matchesSection && matchesCat && matchesSearch;
     });
-  }, [products, currentFilter, searchQuery]);
+  }, [products, currentSection, currentFilter, searchQuery]);
 
   const cartTotal = useMemo(() => cart.reduce((acc, item) => acc + (item.preco * item.quantidade), 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((acc, item) => acc + item.quantidade, 0), [cart]);
@@ -373,16 +461,16 @@ export default function App() {
     }
   };
 
-  const finalizeOrder = async (name: string, phone: string) => {
+  const finalizeOrder = async (name: string, phone: string, address: string) => {
     if (!cart.length) return;
-    if (!name || !phone) {
-      showToast('⚠ Preencha seus dados!');
+    if (!name || !phone || !address || !cep) {
+      showToast('⚠ Preencha todos os dados de entrega!');
       return;
     }
     
     const orderData = {
       data: new Date().toLocaleString('pt-BR'),
-      cliente: { nome: name, telefone: phone },
+      cliente: { nome: name, telefone: phone, endereco: address, cep: cep },
       itens: cart,
       subtotal: cartTotal,
       total: cartTotal + shippingCost,
@@ -394,16 +482,35 @@ export default function App() {
     };
 
     try {
-      await addDoc(collection(db, 'orders'), orderData);
+      const docRef = await addDoc(collection(db, 'orders'), orderData);
+      const orderUrl = `${window.location.origin}/?order=${docRef.id}`;
       
-      let msg = `🛒 *Pedido MIX SHOES*\n━━━━━━━━━━━━━━━━━━\n`;
-      msg += `👤 *Cliente:* ${name}\n📱 *WhatsApp:* ${phone}\n\n*🛍 PRODUTOS:*\n`;
+      let msg = `🛒 *NOVO PEDIDO - MIX SHOES*\n`;
+      msg += `━━━━━━━━━━━━━━━━━━\n`;
+      msg += `🆔 *Pedido:* #${docRef.id.slice(0,6).toUpperCase()}\n`;
+      msg += `🔗 *Link do Pedido:* ${orderUrl}\n\n`;
+      msg += `👤 *Cliente:* ${name}\n`;
+      msg += `📱 *WhatsApp:* ${phone}\n`;
+      msg += `📍 *Endereço:* ${address}\n`;
+      msg += `📫 *CEP:* ${cep}\n\n`;
+      msg += `*🛍 PRODUTOS:*\n`;
+      
       cart.forEach(item => {
-        msg += `• ${item.nome}\n  📏 Tam: ${item.tamanho} | Qtd: ${item.quantidade}\n  💰 R$ ${(item.preco * item.quantidade).toFixed(2)}\n`;
+        msg += `✅ ${item.quantidade}x ${item.nome} (${item.tamanho})\n`;
+        msg += `   💰 R$ ${(item.preco * item.quantidade).toFixed(2)}\n`;
+        if (item.imagem) {
+          msg += `   🖼 Ver Foto: ${item.imagem}\n`;
+        }
+        msg += `\n`;
       });
-      msg += `\n━━━━━━━━━━━━━━━━━━\n📦 *Frete:* ${shippingName} — R$ ${shippingCost.toFixed(2)}\n💰 *TOTAL: R$ ${(cartTotal + shippingCost).toFixed(2)}*\n━━━━━━━━━━━━━━━━━━\n`;
       
-      window.open(`https://wa.me/${config.whatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
+      msg += `━━━━━━━━━━━━━━━━━━\n`;
+      msg += `📦 *Frete:* ${shippingName} — R$ ${shippingCost.toFixed(2)}\n`;
+      msg += `💰 *VALOR TOTAL: R$ ${(cartTotal + shippingCost).toFixed(2)}*\n`;
+      msg += `━━━━━━━━━━━━━━━━━━\n\n`;
+      msg += `🚀 _Clique no link acima para ver as imagens e detalhes completos do pedido._`;
+      
+      window.open(`https://wa.me/${config.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
       setCart([]);
       setCartOpen(false);
       showToast('✅ Pedido enviado!');
@@ -421,10 +528,15 @@ export default function App() {
     }
     showToast('🚀 Semeando dados...');
     const SEED_PRODS = [
-      {name:'Air Max Dn',cat:'Masculino',price:110,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://dcdn-us.mitiendanube.com/stores/007/557/906/products/whatsapp-image-2026-03-18-at-10-09-01-0357e63f121e08a25517762770498843-480-0.webp',desc:'Air Max DN - Modelo exclusivo',stock:20,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Mizuno Premium',cat:'Masculino',price:68,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://dcdn-us.mitiendanube.com/stores/007/557/906/products/whatsapp-image-2026-03-31-at-11-03-11-e60d52667cc422904d17761776414876-480-0.webp',desc:'Mizuno Running - Alta Performace',stock:15,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Samba Plataforma',cat:'Feminino',price:120,priceOld:0,sizes:['34','35','36','37','38','39'],img:'',desc:'Adidas Samba Plataforma - Estilo e Conforto',stock:12,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Air Force 1 Shadow',cat:'Feminino',price:95,priceOld:0,sizes:['34','35','36','37','38'],img:'',desc:'Nike AF1 Shadow White',stock:10,vendas:0,novo:false,createdAt: Date.now()},
+      {name:'Mizuno Prophecy',cat:'Tênis',gender:'Masculino',price:68,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://picsum.photos/seed/mizuno/400/400',desc:'Mizuno Premium',stock:20,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Nike Shox TL',cat:'Tênis',gender:'Masculino',price:68,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://picsum.photos/seed/shox/400/400',desc:'Nike Shox 12 molas',stock:15,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Samba Adidas',cat:'Tênis',gender:'Feminino',price:68,priceOld:0,sizes:['34','35','36','37','38','39'],img:'https://picsum.photos/seed/samba/400/400',desc:'Estilo casual',stock:12,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Nike Chuteira Elite',cat:'Chuteira',gender:'Masculino',price:68,priceOld:0,sizes:['36','37','38','39','40','41','42','43'],img:'https://picsum.photos/seed/chuteira/400/400',desc:'Alta performance em campo',stock:10,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Chinelo Slide',cat:'Chinelo',gender:'Unisex',price:68,priceOld:0,sizes:['34','35','36','37','38','39', '40', '41', '42'],img:'https://picsum.photos/seed/slide/400/400',desc:'Conforto absoluto',stock:15,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Camisa Flamengo 2026',cat:'Camisa de Time',gender:'Masculino',price:99,priceOld:0,sizes:['P','M','G','GG'],img:'https://picsum.photos/seed/flamengo/400/400',desc:'Manto Sagrado',stock:20,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Conjunto Nike Dryfit Black',cat:'Conjunto Dryfit',gender:'Masculino',price:85,priceOld:0,sizes:['P','M','G','GG'],img:'https://picsum.photos/seed/dryfit/400/400',desc:'Conjunto para treino',stock:18,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Air Jordan 1 High',cat:'Primeira Linha',gender:'Unisex',price:150,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://picsum.photos/seed/jordan/400/400',desc:'Colecionador',stock:5,vendas:0,novo:true,createdAt: Date.now()},
+      {name:'Boneco Infantil Nike',cat:'Infantil',gender:'Unisex',price:68,priceOld:0,sizes:['28','29','30','31','32','33'],img:'https://picsum.photos/seed/kids/400/400',desc:'Para os pequenos',stock:25,vendas:0,novo:true,createdAt: Date.now()},
     ];
     for (const p of SEED_PRODS) {
       await addDoc(collection(db, 'products'), p);
@@ -441,22 +553,69 @@ export default function App() {
     }
   };
 
-  if (loading) {
+  if (loading || !minLoadingDone) {
     return (
-      <div className="fixed inset-0 bg-bg flex flex-col items-center justify-center gap-6">
-        <div className="font-bebas text-6xl tracking-widest flex gap-2">
-          <span className="text-cyan">MIX</span>
-          <span className="text-orange">SHOES</span>
+      <div className="fixed inset-0 bg-bg flex flex-col items-center justify-center gap-6 z-[1000]">
+        <div className="w-48 h-48 relative mb-8 flex items-center justify-center">
+           <motion.img 
+             src="https://dcdn-us.mitiendanube.com/stores/007/557/906/themes/common/logo-3496612179248405264-1776098643-0c2a0da76c2c3e0a22df20d1c9b471f51776098643-640-0.webp" 
+             alt="Mix Shoes Logo"
+             animate={{ 
+                rotate: [0, -12, 0, 12, 0],
+                y: [0, -25, 0, -25, 0],
+                x: [-10, 10, -10, 10, -10]
+             }}
+             transition={{ 
+                duration: 0.6, 
+                repeat: Infinity,
+                ease: "easeInOut" 
+             }}
+             className="w-full h-full object-contain brightness-125 drop-shadow-[0_0_30px_rgba(0,200,255,0.6)]"
+             referrerPolicy="no-referrer"
+             onError={(e) => {
+               (e.target as HTMLImageElement).src = "https://picsum.photos/seed/mixshoes/200/200";
+             }}
+           />
+           <div className="absolute -bottom-4 w-32 h-2 bg-black/40 rounded-[100%] blur-md animate-pulse" />
         </div>
-        <div className="w-48 h-1 bg-border rounded-full overflow-hidden">
-          <motion.div 
-            className="h-full bg-gradient-to-r from-cyan to-orange"
-            initial={{ width: 0 }}
-            animate={{ width: "100%" }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-          />
+        
+        <div className="text-center space-y-4">
+          <div className="font-bebas text-5xl tracking-[0.2em] flex gap-3 justify-center">
+            <motion.span 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-cyan text-shadow-cyan"
+            >
+              MIX
+            </motion.span>
+            <motion.span 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-orange text-shadow-orange"
+            >
+              SHOES
+            </motion.span>
+          </div>
+          
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-64 h-1.5 bg-bg3 rounded-full overflow-hidden border border-border">
+              <motion.div 
+                className="h-full bg-gradient-to-r from-cyan via-white to-orange"
+                initial={{ width: "0%" }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 6, ease: "linear" }}
+              />
+            </div>
+            <motion.div 
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-muted text-[10px] font-black uppercase tracking-[0.3em]"
+            >
+              Sincronizando Catálogo...
+            </motion.div>
+          </div>
         </div>
-        <div className="text-muted text-sm tracking-widest uppercase">Carregando catálogo...</div>
       </div>
     );
   }
@@ -478,12 +637,31 @@ export default function App() {
       {/* Header */}
       <header className={`h-[72px] sticky top-0 z-50 border-b border-border transition-all ${scrolled ? 'bg-bg/95 backdrop-blur-md h-[64px]' : 'bg-bg/90 backdrop-blur-sm'}`}>
         <div className="max-w-[1400px] mx-auto px-6 h-full flex items-center justify-between gap-6">
-          <button onClick={() => setCurrentFilter('all')} className="flex items-center gap-3 active:scale-95 transition-transform">
-            <div className="font-bebas text-3xl tracking-wider flex gap-1">
-              <span className="text-cyan">MIX</span>
-              <span className="text-orange">SHOES</span>
-            </div>
-          </button>
+          <div className="flex items-center gap-4">
+             <button 
+               onClick={() => setIsMenuOpen(true)}
+               className="p-2 border border-border rounded-lg text-white hover:border-cyan hover:text-cyan transition-all"
+             >
+               <Menu size={20} />
+             </button>
+             <button onClick={() => { setCurrentFilter('all'); setCurrentSection('all'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="flex items-center gap-3 active:scale-95 transition-transform overflow-hidden">
+               <div className="w-12 h-12 relative shrink-0">
+                 <img 
+                    src="https://dcdn-us.mitiendanube.com/stores/007/557/906/themes/common/logo-3496612179248405264-1776098643-0c2a0da76c2c3e0a22df20d1c9b471f51776098643-640-0.webp" 
+                    alt="Logo" 
+                    className="w-full h-full object-contain brightness-110"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://picsum.photos/seed/mixshoes/100/100";
+                    }}
+                 />
+               </div>
+               <div className="font-bebas text-2xl tracking-wider flex gap-1">
+                 <span className="text-cyan">MIX</span>
+                 <span className="text-orange">SHOES</span>
+               </div>
+             </button>
+          </div>
 
           <div className="hidden md:flex flex-1 max-w-xl relative">
             <input 
@@ -515,139 +693,216 @@ export default function App() {
         </div>
       </header>
 
-      {/* Nav */}
-      <nav className="bg-bg2 border-b border-border sticky top-[72px] sm:top-[72px] z-40">
-        <div className="max-w-[1400px] mx-auto px-6 flex items-center gap-1 overflow-x-auto no-scrollbar">
-          <button 
-            onClick={() => setCurrentFilter('all')}
-            className={`px-5 py-3.5 text-xs font-bold uppercase tracking-[0.15em] border-b-2 transition-all whitespace-nowrap ${currentFilter === 'all' ? 'text-cyan border-cyan' : 'text-muted border-transparent hover:text-white'}`}
+      {/* Main Content Areas */}
+      {currentSection === 'all' && (
+        <section className="max-w-[1400px] mx-auto px-6 py-6">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center mb-16"
           >
-            🏠 Todos
-          </button>
-          {CATEGORIES.map(cat => (
-            <button 
-              key={cat}
-              onClick={() => setCurrentFilter(cat)}
-              className={`px-5 py-3.5 text-xs font-bold uppercase tracking-[0.15em] border-b-2 transition-all whitespace-nowrap ${currentFilter === cat ? 'text-cyan border-cyan' : 'text-muted border-transparent hover:text-white'}`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </nav>
+            <h2 className="font-bebas text-6xl md:text-8xl tracking-tight mb-4">ESCOLHA SEU <span className="text-cyan">ESTILO</span></h2>
+            <p className="text-muted uppercase tracking-[0.3em] font-bold">O melhor da moda esportiva e premium do Brasil</p>
+          </motion.div>
 
-      {/* Hero (Only on "All") */}
-      {currentFilter === 'all' && !searchQuery && (
-        <section className="max-w-[1400px] mx-auto px-6 py-16 grid lg:grid-cols-2 items-center gap-12 overflow-hidden">
-          <motion.div 
-            initial={{ opacity: 0, x: -30 }} 
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="inline-block bg-cyan/10 border border-cyan/30 text-cyan px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-6">
-              ✨ Coleção 2026 — PREMIUM QUALITY
-            </div>
-            <h1 className="font-bebas text-[clamp(4rem,10vw,8rem)] leading-[0.9] tracking-tight mb-6">
-              <span className="text-cyan drop-shadow-[0_0_40px_rgba(0,200,255,0.4)]">MIX</span><br />
-              <span className="text-orange drop-shadow-[0_0_40px_rgba(255,140,0,0.3)]">SHOES</span>
-            </h1>
-            <p className="text-muted text-lg max-w-lg leading-relaxed mb-10">
-              Os melhores tênis importados, chuteiras profissionais e moda esportiva com os preços mais competitivos do mercado.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <button 
-                onClick={() => document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth' })}
-                className="bg-cyan text-black px-10 py-4 rounded-2xl font-black text-base shadow-[0_10px_30px_rgba(0,200,255,0.3)] hover:-translate-y-1 hover:shadow-[0_15px_40px_rgba(0,200,255,0.5)] transition-all"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 min-h-[600px]">
+            {['Masculino', 'Feminino'].map((sec, idx) => (
+              <motion.button
+                key={sec}
+                initial={{ opacity: 0, x: idx === 0 ? -50 : 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setCurrentSection(sec as any);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="relative group overflow-hidden rounded-[3rem] border border-white/5 bg-[#0A0C10]"
               >
-                Ver Catálogo 👟
-              </button>
-              <button 
-                onClick={() => window.open(`https://wa.me/${config.whatsapp}`, '_blank')}
-                className="border-2 border-orange text-orange px-10 py-4 rounded-2xl font-black text-base hover:bg-orange hover:text-black hover:-translate-y-1 transition-all"
-              >
-                WhatsApp 💬
-              </button>
-            </div>
-          </motion.div>
-          
-          <motion.div 
-            className="relative hidden lg:flex justify-center items-center h-[500px]"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <div className="absolute w-[400px] h-[400px] bg-cyan/10 blur-[100px] rounded-full animate-pulse" />
-            <div className="absolute w-[300px] h-[300px] bg-orange/10 blur-[80px] rounded-full animate-pulse [animation-delay:1s]" />
-            <div className="font-bebas text-[180px] text-transparent stroke-1 stroke-cyan/20 select-none tracking-[0.1em] italic -rotate-12">SNEAKERS</div>
-          </motion.div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10" />
+                <img 
+                  src={sec === 'Masculino' ? 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=2070&auto=format&fit=crop' : 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?q=80&w=1974&auto=format&fit=crop'} 
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-all duration-700 group-hover:scale-110"
+                  alt={sec}
+                  referrerPolicy="no-referrer"
+                />
+                
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-12 text-center">
+                  <div className="bg-white/10 backdrop-blur-md border border-white/10 px-6 py-2 rounded-full text-[10px] font-black tracking-[0.2em] mb-4 opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0">
+                    EXPLORAR COLEÇÃO
+                  </div>
+                  <h3 className="font-bebas text-7xl md:text-9xl tracking-wider text-white mb-2 leading-none uppercase">
+                    {sec === 'Masculino' ? 'MASCULINO' : 'FEMININO'}
+                  </h3>
+                  <div className="text-cyan font-black text-xl tracking-[0.2em]">R$:68,00</div>
+                </div>
+
+                <div className="absolute top-8 right-8 z-20 w-16 h-16 bg-white flex items-center justify-center rounded-full text-black transform rotate-45 group-hover:rotate-0 transition-all duration-500">
+                  <ArrowUpRight size={32} />
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Mode View: Submenus / Categories Grid */}
+      {currentSection !== 'all' && currentFilter === 'all' && !searchQuery && (
+        <section className="max-w-[1400px] mx-auto px-6 py-12">
+          <div className="flex items-center justify-between mb-12">
+            <button 
+              onClick={() => setCurrentSection('all')}
+              className="flex items-center gap-2 text-muted hover:text-white transition-all text-xs font-black uppercase tracking-widest"
+            >
+              <ChevronLeft size={16} /> Voltar para o Início
+            </button>
+            <div className="h-px flex-1 mx-8 bg-border" />
+            <h2 className="font-bebas text-4xl tracking-widest">SUB-CATEGORIAS <span className="text-cyan">{currentSection.toUpperCase()}</span></h2>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+             {[
+               { id: 'Tênis', label: currentSection === 'Masculino' ? 'Tênis/Chuteira 68' : 'Tênis 68', icon: <ShoppingBag size={30} />, price: 'R$:68,00' },
+               { id: 'Camisas', label: 'Camisas', icon: <Shirt size={30} />, price: 'Diversos' },
+               { id: 'Chinelo', label: 'Chinelos', icon: <Check size={30} />, price: 'R$:68,00' },
+               { id: 'Primeira Linha', label: 'Primeira Linha', icon: <Sparkles size={30} />, price: '+ R$:68,00' },
+               { id: 'Infantil', label: 'Infantil', icon: <Baby size={30} />, price: 'R$:68,00' }
+             ].map((group, idx) => (
+               <motion.button
+                 key={group.id}
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: idx * 0.05 }}
+                 onClick={() => setCurrentFilter(group.id as any)}
+                 className="flex flex-col items-center gap-4 p-6 bg-bg2 border border-border rounded-[2rem] hover:border-cyan/50 hover:bg-cyan/5 transition-all group"
+               >
+                 <div className="w-16 h-16 bg-bg border border-border rounded-2xl flex items-center justify-center text-muted group-hover:text-cyan group-hover:border-cyan/30 transition-all">
+                    {group.icon}
+                 </div>
+                 <div className="text-[10px] font-black uppercase tracking-widest text-center">
+                    {group.label}<br />
+                    <span className="text-cyan">{group.price}</span>
+                 </div>
+               </motion.button>
+             ))}
+          </div>
         </section>
       )}
 
       {/* Catalog */}
-      <main id="catalog" className="max-w-[1400px] mx-auto px-6 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex flex-col">
-            <h2 className="text-2xl font-black tracking-tight">{currentFilter === 'all' ? 'Lançamentos' : currentFilter}</h2>
-            <span className="text-muted text-xs uppercase tracking-widest">{filteredProducts.length} produtos encontrados</span>
-          </div>
-          <div className="flex gap-2">
-            {/* Filter tags could go here */}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-          <AnimatePresence mode="popLayout">
-            {filteredProducts.map(p => (
-              <motion.div 
-                layout
-                key={p.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                whileHover={{ y: -8 }}
-                className="group bg-bg2 border border-border rounded-2xl overflow-hidden cursor-pointer hover:border-cyan/30 hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all"
-                onClick={() => setSelectedProduct(p)}
-              >
-                <div className="aspect-square bg-bg3 relative overflow-hidden">
-                  {p.novo && <div className="absolute top-3 left-3 bg-cyan text-black px-2.5 py-1 rounded-full text-[9px] font-black z-10">NOVO</div>}
-                  {p.priceOld > 0 && (
-                    <div className="absolute top-3 left-3 bg-orange text-black px-2.5 py-1 rounded-full text-[9px] font-black z-10">
-                      -{Math.round((1 - p.price/p.priceOld) * 100)}%
-                    </div>
-                  )}
-                  {p.img ? (
-                    <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl opacity-20">👟</div>
-                  )}
+      {currentSection !== 'all' && (
+        <main id="catalog" className="max-w-[1400px] mx-auto px-6 py-12">
+          {currentFilter === 'all' && !searchQuery ? (
+            <div className="space-y-20">
+              {/* Promo Section (68 Masc / 58 Fem) */}
+              <section>
+                <div className="flex items-center gap-4 mb-12">
+                  <div className="h-12 w-2 bg-cyan shadow-[0_0_20px_rgba(0,255,255,0.5)]"></div>
+                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white underline decoration-cyan/30 underline-offset-8">
+                    {currentSection.toUpperCase()} R$:68,00
+                  </h2>
                 </div>
-                <div className="p-4">
-                  <div className="text-[10px] text-muted uppercase tracking-widest mb-1">{p.cat}</div>
-                  <h3 className="font-bold text-sm mb-2 line-clamp-1">{p.name}</h3>
-                  <div className="flex items-baseline gap-2 mb-4">
-                    <span className="font-bebas text-2xl text-orange">R$ {p.price.toFixed(2)}</span>
-                    {p.priceOld > 0 && <span className="text-muted text-xs line-through">R$ {p.priceOld.toFixed(2)}</span>}
-                  </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); addToCart(p, p.sizes[0], 1); }}
-                    className="w-full bg-cyan/10 border border-cyan/20 text-cyan py-2.5 rounded-xl font-bold text-xs hover:bg-cyan hover:text-black transition-all"
-                  >
-                    Adicionar 🛒
-                  </button>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                  {products.filter(p => 
+                    (p.cat === 'Tênis' || p.cat === 'Chuteira') && 
+                    p.gender === currentSection && 
+                    p.price <= 68
+                  ).map(p => (
+                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+                  ))}
                 </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+              </section>
 
-        {filteredProducts.length === 0 && (
-          <div className="text-center py-20 bg-bg2 rounded-3xl border border-dashed border-border">
-            <Search className="mx-auto text-muted mb-4 opacity-30" size={48} />
-            <div className="text-muted text-lg">Nenhum produto encontrado para sua busca</div>
-            <button onClick={() => { setSearchQuery(''); setCurrentFilter('all'); }} className="mt-4 text-cyan text-sm underline">Limpar filtros</button>
-          </div>
+              {/* Camisas Area */}
+              <section>
+                <div className="flex items-center gap-4 mb-12">
+                  <div className="h-12 w-2 bg-orange shadow-[0_0_20px_rgba(255,140,0,0.5)]"></div>
+                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">CAMISAS</h2>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                  {products.filter(p => (p.cat === 'Camisa de Time' || p.cat === 'Conjunto Dryfit')).map(p => (
+                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+                  ))}
+                </div>
+              </section>
+
+              {/* Chinelos Area */}
+              <section>
+                <div className="flex items-center gap-4 mb-12">
+                  <div className="h-12 w-2 bg-yellow-400"></div>
+                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">CHINELOS</h2>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                  {products.filter(p => p.cat === 'Chinelo').map(p => (
+                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+                  ))}
+                </div>
+              </section>
+
+              {/* Primeira Linha Area */}
+              <section>
+                <div className="flex items-center gap-4 mb-12">
+                  <div className="h-12 w-2 bg-purple-500"></div>
+                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">PRIMEIRA LINHA</h2>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                  {products.filter(p => p.price > 68 || p.cat === 'Primeira Linha').map(p => (
+                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+                  ))}
+                </div>
+              </section>
+
+              {/* Infantil Area */}
+              <section>
+                <div className="flex items-center gap-4 mb-12">
+                  <div className="h-12 w-2 bg-pink-500"></div>
+                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">INFANTIL</h2>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                  {products.filter(p => p.cat === 'Infantil').map(p => (
+                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : (
+          <>
+            <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
+              <div className="flex flex-col">
+                <div className="flex items-center gap-3 mb-2">
+                  {currentFilter !== 'all' && !searchQuery && (
+                    <button 
+                      onClick={() => setCurrentFilter('all')}
+                      className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-cyan hover:text-white transition-all bg-cyan/10 px-3 py-1 rounded-full border border-cyan/20"
+                    >
+                      <ChevronLeft size={12} /> Voltar
+                    </button>
+                  )}
+                  <h2 className="text-2xl font-black tracking-tight uppercase tracking-[0.1em]">{searchQuery ? `Resultado para "${searchQuery}"` : currentFilter}</h2>
+                </div>
+                <span className="text-muted text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold">{filteredProducts.length} produtos encontrados</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+              <AnimatePresence mode="popLayout">
+                {filteredProducts.map(p => (
+                  <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+                ))}
+              </AnimatePresence>
+            </div>
+
+            {filteredProducts.length === 0 && (
+              <div className="text-center py-20 bg-bg2 rounded-3xl border border-dashed border-border">
+                <Search className="mx-auto text-muted mb-4 opacity-30" size={48} />
+                <div className="text-muted text-lg">Nenhum produto encontrado para sua busca</div>
+                <button onClick={() => { setSearchQuery(''); setCurrentFilter('all'); }} className="mt-4 text-cyan text-sm underline">Limpar filtros</button>
+              </div>
+            )}
+          </>
         )}
       </main>
+      )}
 
       {/* Footer */}
       <footer className="bg-bg2 border-t border-border mt-20 pt-20 pb-10">
@@ -903,6 +1158,205 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {isMenuOpen && (
+          <div className="fixed inset-0 z-[500] flex justify-start">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="relative w-full max-w-[320px] bg-white text-black h-full shadow-2xl flex flex-col"
+            >
+               {/* Menu Header */}
+               <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                 {menuLevel > 1 ? (
+                   <button 
+                     onClick={() => {
+                       if(menuLevel === 3) setMenuLevel(2);
+                       else setMenuLevel(1);
+                     }}
+                     className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                   >
+                     <ChevronLeft size={24} className="text-[#0088cc]" />
+                   </button>
+                 ) : (
+                   <div className="w-10" />
+                 )}
+                 <h2 className="font-bold text-[#0088cc] uppercase tracking-wider text-sm">
+                   {menuLevel === 1 ? 'Menu' : (activeMenuId === 'products' ? 'Produtos' : activeMenuId?.toUpperCase())}
+                 </h2>
+                 <button onClick={() => { setIsMenuOpen(false); setMenuLevel(1); }} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400">
+                   <X size={24} />
+                 </button>
+               </div>
+
+               {/* Navigation Levels */}
+               <div className="flex-1 border-t border-gray-100 flex flex-col overflow-hidden">
+                 <AnimatePresence mode="wait">
+                   <motion.div 
+                     key={menuLevel + (activeSubMenuId || '')}
+                     initial={{ x: 30, opacity: 0 }}
+                     animate={{ x: 0, opacity: 1 }}
+                     exit={{ x: -30, opacity: 0 }}
+                     transition={{ duration: 0.2, ease: "easeOut" }}
+                     className="flex-1 overflow-y-auto no-scrollbar"
+                   >
+                     {/* Level 1: Main Menu */}
+                     {menuLevel === 1 && (
+                       <div className="p-4">
+                         <div className="relative mb-6">
+                           <input 
+                             type="text" 
+                             placeholder="BUSCAR PRODUTOS..." 
+                             className="w-full bg-gray-50 border border-gray-100 rounded-lg py-3 px-4 pr-10 text-xs font-bold uppercase tracking-wider outline-none focus:border-[#0088cc] transition-all"
+                             value={searchQuery}
+                             onChange={(e) => {
+                               setSearchQuery(e.target.value);
+                               if(e.target.value) {
+                                 setIsMenuOpen(false);
+                                 const catElement = document.getElementById('catalog');
+                                 if(catElement) catElement.scrollIntoView({behavior: 'smooth'});
+                               }
+                             }}
+                           />
+                           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                         </div>
+                         
+                         <div className="space-y-1">
+                           <button 
+                             onClick={() => { setIsMenuOpen(false); setCurrentFilter('all'); setCurrentSection('all'); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                             className="w-full text-left py-4 px-2 font-black text-gray-700 hover:text-[#0088cc] hover:bg-[#0088cc]/5 rounded-xl transition-all flex items-center justify-between text-sm uppercase tracking-widest"
+                           >
+                             Início
+                           </button>
+                           <button 
+                             onClick={() => { setMenuLevel(2); setActiveMenuId('products'); }}
+                             className="w-full text-left py-4 px-2 font-black text-gray-700 hover:text-[#0088cc] hover:bg-[#0088cc]/5 rounded-xl transition-all flex items-center justify-between text-sm uppercase tracking-widest group"
+                           >
+                             Produtos
+                             <ChevronRight size={18} className="text-gray-300 group-hover:text-[#0088cc] transition-transform group-hover:translate-x-1" />
+                           </button>
+                           <button 
+                             onClick={() => { setIsMenuOpen(false); const footer = document.querySelector('footer'); footer?.scrollIntoView({behavior: 'smooth'}); }}
+                             className="w-full text-left py-4 px-2 font-black text-gray-700 hover:text-[#0088cc] hover:bg-[#0088cc]/5 rounded-xl transition-all flex items-center justify-between text-sm uppercase tracking-widest"
+                           >
+                             Contato
+                           </button>
+                         </div>
+                       </div>
+                     )}
+
+                     {/* Level 2: Products Categories */}
+                     {menuLevel === 2 && activeMenuId === 'products' && (
+                       <div>
+                          <button 
+                            onClick={() => { setIsMenuOpen(false); setCurrentFilter('all'); setCurrentSection('all'); }}
+                            className="w-full text-left p-6 border-b border-gray-50 text-[#0088cc] font-black text-xs uppercase tracking-widest hover:bg-[#0088cc]/5 transition-colors"
+                          >
+                            Ver todos os produtos
+                          </button>
+                          
+                          {[
+                            { id: 'masculino', label: 'MASCULINO R$:68,00', gender: 'Masculino', hasSub: true },
+                            { id: 'feminino', label: 'FEMININO R$:68,00', gender: 'Feminino', hasSub: true },
+                            { id: 'chuteira', label: 'CHUTEIRA R$:68,00', cat: 'Chuteira', hasSub: true },
+                            { id: 'chinelo', label: 'CHINELO R$:68,00', cat: 'Chinelo', hasSub: true },
+                            { id: 'camisa', label: 'CAMISA DE TIME', cat: 'Camisa de Time' },
+                            { id: 'conjunto', label: 'CONJUNTO DRYFIT', cat: 'Conjunto Dryfit', hasSub: true },
+                            { id: 'primeira-linha', label: 'PRIMEIRA LINHA', cat: 'Primeira Linha', hasSub: true },
+                            { id: 'infantil', label: 'INFANTIL R$:68,00', cat: 'Infantil', hasSub: true }
+                          ].map(item => (
+                            <button 
+                              key={item.id}
+                              onClick={() => {
+                                if(item.hasSub) {
+                                  setMenuLevel(3);
+                                  setActiveSubMenuId(item.id);
+                                } else {
+                                  setIsMenuOpen(false);
+                                  if(item.cat) setCurrentFilter(item.cat);
+                                  if(item.gender) { setCurrentSection(item.gender as any); setCurrentFilter('all'); }
+                                }
+                              }}
+                              className="w-full text-left p-6 border-b border-gray-50 text-gray-700 hover:text-[#0088cc] hover:bg-[#0088cc]/5 font-black text-xs uppercase tracking-widest flex items-center justify-between transition-all group"
+                            >
+                              {item.label}
+                              {item.hasSub && <ChevronRight size={18} className="text-gray-300 group-hover:text-[#0088cc] transition-transform group-hover:translate-x-1" />}
+                            </button>
+                          ))}
+                       </div>
+                     )}
+
+                     {/* Level 3: Sub-categories / Options */}
+                     {menuLevel === 3 && (
+                       <div>
+                          <button 
+                            onClick={() => { 
+                              setIsMenuOpen(false);
+                              const parent = [
+                                { id: 'masculino', gender: 'Masculino' },
+                                { id: 'feminino', gender: 'Feminino' },
+                                { id: 'chuteira', cat: 'Chuteira' },
+                                { id: 'chinelo', cat: 'Chinelo' },
+                                { id: 'conjunto', cat: 'Conjunto Dryfit' },
+                                { id: 'primeira-linha', cat: 'Primeira Linha' },
+                                { id: 'infantil', cat: 'Infantil' }
+                              ].find(o => o.id === activeSubMenuId);
+                              
+                              if(parent?.gender) { setCurrentSection(parent.gender as any); setCurrentFilter('all'); }
+                              if(parent?.cat) { setCurrentFilter(parent.cat); setCurrentSection('all'); }
+                            }}
+                            className="w-full text-left p-6 border-b border-gray-50 text-[#0088cc] font-black text-xs uppercase tracking-widest hover:bg-[#0088cc]/5 transition-colors"
+                          >
+                            Ver tudo em {activeSubMenuId?.replace('-', ' ')}
+                          </button>
+
+                          {['masculino', 'feminino', 'infantil', 'primeira-linha'].includes(activeSubMenuId!) && (
+                             <div className="flex flex-col">
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentSection('Masculino'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">Masculino</button>
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentSection('Feminino'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">Feminino</button>
+                             </div>
+                          )}
+
+                          {['chuteira', 'chinelo'].includes(activeSubMenuId!) && (
+                             <div className="flex flex-col">
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentFilter(activeSubMenuId === 'chuteira' ? 'Chuteira' : 'Chinelo'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">Numeração do 34 ao 39</button>
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentFilter(activeSubMenuId === 'chuteira' ? 'Chuteira' : 'Chinelo'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">Numeração do 39 ao 43</button>
+                             </div>
+                          )}
+
+                          {activeSubMenuId === 'conjunto' && (
+                             <div className="flex flex-col">
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentFilter('Conjunto Dryfit'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">M</button>
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentFilter('Conjunto Dryfit'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">G</button>
+                               <button onClick={() => { setIsMenuOpen(false); setCurrentFilter('Conjunto Dryfit'); }} className="w-full text-left p-6 border-b border-gray-50 text-gray-600 hover:text-[#0088cc] font-black text-xs uppercase tracking-widest transition-colors">GG</button>
+                             </div>
+                          )}
+                       </div>
+                     )}
+                   </motion.div>
+                 </AnimatePresence>
+               </div>
+
+               {/* Footer of Menu */}
+               <div className="p-4 border-t border-gray-50 flex items-center justify-center gap-4 text-gray-400">
+                 <button onClick={() => { setIsMenuOpen(false); setIsAdminMode(true); }} className="flex items-center gap-2 text-xs hover:text-[#0088cc]"><UserIcon size={14} /> Iniciar sessão</button>
+                 <span className="text-gray-200">|</span>
+                 <button className="text-xs hover:text-[#0088cc]">Criar uma conta</button>
+               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Cart Sidebar */}
       <AnimatePresence>
         {cartOpen && (
@@ -956,27 +1410,6 @@ export default function App() {
                         </button>
                       </div>
                     ))}
-                    
-                    <div className="bg-bg3 p-6 rounded-3xl border border-border">
-                      <div className="text-xs font-bold uppercase tracking-widest mb-4">🏠 Calcular Frete</div>
-                      <div className="flex gap-2 mb-4">
-                        <input 
-                          type="text" 
-                          placeholder="00000-000" 
-                          className="flex-1 bg-bg border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-cyan"
-                          value={cep}
-                          onChange={(e) => handleCEP(e.target.value)}
-                          maxLength={9}
-                        />
-                      </div>
-                      {shippingLoading && <div className="text-[10px] text-cyan animate-pulse">Consultando prazos...</div>}
-                      {shippingCost > 0 && (
-                        <div className="flex items-center justify-between p-3 bg-cyan/5 border border-cyan/20 rounded-xl">
-                          <div className="text-[10px] font-black">{shippingName} — {shippingPrazo}</div>
-                          <div className="text-cyan font-bold">R$ {shippingCost.toFixed(2)}</div>
-                        </div>
-                      )}
-                    </div>
                   </>
                 )}
               </div>
@@ -990,17 +1423,43 @@ export default function App() {
 
                 {cart.length > 0 && (
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                       <input id="finalName" type="text" placeholder="Seu nome completo" className="w-full bg-bg border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-cyan" />
-                       <input id="finalPhone" type="tel" placeholder="Seu WhatsApp" className="w-full bg-bg border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-cyan" />
+                    <div className="space-y-3">
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-muted tracking-widest ml-1">Dados de Entrega</label>
+                          <input id="finalName" type="text" placeholder="Nome Completo" className="w-full bg-bg border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-cyan" />
+                          <input id="finalAddress" type="text" placeholder="Endereço Completo (Rua, Número, Bairro)" className="w-full bg-bg border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-cyan" />
+                          <input id="finalPhone" type="tel" placeholder="Seu WhatsApp" className="w-full bg-bg border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-cyan" />
+                       </div>
+
+                       <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-muted tracking-widest ml-1">Cálculo de Frete</label>
+                          <div className="flex gap-2">
+                             <input 
+                               type="text" 
+                               placeholder="CEP: 00000-000" 
+                               className="flex-1 bg-bg border border-border rounded-xl px-4 py-3 text-sm outline-none focus:border-cyan"
+                               value={cep}
+                               onChange={(e) => handleCEP(e.target.value)}
+                               maxLength={9}
+                             />
+                          </div>
+                          {shippingLoading && <div className="text-[10px] text-cyan animate-pulse ml-1">Calculando frete...</div>}
+                          {shippingCost > 0 && (
+                            <div className="flex items-center justify-between p-3 bg-cyan/5 border border-cyan/20 rounded-xl mt-2">
+                              <div className="text-[10px] font-black">{shippingName} — {shippingPrazo}</div>
+                              <div className="text-cyan font-bold text-xs">R$ {shippingCost.toFixed(2)}</div>
+                            </div>
+                          )}
+                       </div>
                     </div>
                     <button 
                       onClick={() => {
                         const n = (document.getElementById('finalName') as HTMLInputElement).value;
+                        const a = (document.getElementById('finalAddress') as HTMLInputElement).value;
                         const p = (document.getElementById('finalPhone') as HTMLInputElement).value;
-                        finalizeOrder(n, p);
+                        finalizeOrder(n, p, a);
                       }}
-                      className="w-full bg-green text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all"
+                      className="w-full bg-green text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all mt-4"
                     >
                       <Phone size={20} fill="currentColor" /> Enviar Pedido
                     </button>
@@ -1024,8 +1483,8 @@ export default function App() {
                   <h2 className="font-bebas text-4xl mb-2">PAINEL DE CONTROLE</h2>
                   <p className="text-muted text-sm mb-10">Mix Shoes — Área Administrativa</p>
                   <div className="space-y-4">
-                    <input id="admU" type="text" placeholder="Usuário" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" defaultValue="mixshoes" />
-                    <input id="admP" type="password" placeholder="Senha" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" defaultValue="adminmixshoes" />
+                    <input id="admU" type="text" placeholder="Usuário" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
+                    <input id="admP" type="password" placeholder="Senha" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
                     <button 
                       onClick={async () => {
                         const u = (document.getElementById('admU') as HTMLInputElement).value;
@@ -1552,8 +2011,14 @@ export default function App() {
                    <input id="pName" type="text" defaultValue={editingProduct?.name || ''} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
                  </div>
                  <div>
+                   <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Seção / Gênero</label>
+                   <select id="pGender" defaultValue={editingProduct?.gender || 'Masculino'} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan appearance-none">
+                      {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                   </select>
+                 </div>
+                 <div>
                    <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Categoria</label>
-                   <select id="pCat" defaultValue={editingProduct?.cat || 'Masculino'} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan appearance-none">
+                   <select id="pCat" defaultValue={editingProduct?.cat || 'Tênis'} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan appearance-none">
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                    </select>
                  </div>
@@ -1586,6 +2051,7 @@ export default function App() {
                    }
                    const data = {
                       name: (document.getElementById('pName') as HTMLInputElement).value,
+                      gender: (document.getElementById('pGender') as HTMLSelectElement).value,
                       cat: (document.getElementById('pCat') as HTMLSelectElement).value,
                       price: Number((document.getElementById('pPrice') as HTMLInputElement).value),
                       img: (document.getElementById('pImg') as HTMLInputElement).value,
@@ -1597,6 +2063,10 @@ export default function App() {
                       novo: editingProduct?.novo ?? true,
                       createdAt: editingProduct?.createdAt || Date.now()
                    };
+                   
+                   // Some categories might have different prices, let's allow setting it if we add the input back,
+                   // but for now the user mentioned 68,00 is the standard for these sections.
+                   // Wait, I should probably keep the price input just in case.
                    
                    if(!data.name || !data.price) { showToast('⚠ Preencha Nome e Preço'); return; }
 
@@ -1645,14 +2115,23 @@ export default function App() {
 
                    <div className="bg-bg3 rounded-2xl border border-border overflow-hidden">
                       <div className="p-4 bg-bg2 text-[10px] font-black uppercase tracking-widest text-muted border-b border-border">Itens do Pedido</div>
-                      <div className="max-h-48 overflow-y-auto p-4 space-y-3">
+                      <div className="max-h-80 overflow-y-auto p-4 space-y-4">
                          {viewingOrder.itens.map(i => (
-                           <div key={i._key} className="flex justify-between items-center text-sm">
-                              <div>
-                                 <span className="font-bold">{i.nome}</span>
-                                 <span className="text-[10px] text-muted ml-2">TAM: {i.tamanho} (x{i.quantidade})</span>
-                              </div>
-                              <span className="font-bebas text-orange">R$ {(i.preco * i.quantidade).toFixed(2)}</span>
+                           <div key={i._key} className="flex justify-between items-center bg-bg/20 p-3 rounded-2xl border border-border/50">
+                             <div className="flex items-center gap-4">
+                               <div className="w-14 h-14 bg-bg rounded-xl overflow-hidden border border-border shrink-0">
+                                 {i.imagem ? <img src={i.imagem} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xl">👟</div>}
+                               </div>
+                               <div>
+                                 <div className="font-bold text-sm leading-tight mb-1">{i.nome}</div>
+                                 <div className="text-[10px] text-muted font-black uppercase tracking-widest flex items-center gap-2">
+                                     <span>TAM: {i.tamanho}</span>
+                                     <span className="w-1 h-1 bg-border rounded-full" />
+                                     <span>QTD: {i.quantidade}</span>
+                                 </div>
+                               </div>
+                             </div>
+                             <div className="font-bebas text-xl text-orange whitespace-nowrap">R$ {(i.preco * i.quantidade).toFixed(2)}</div>
                            </div>
                          ))}
                       </div>
