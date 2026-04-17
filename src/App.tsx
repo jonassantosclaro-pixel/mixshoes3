@@ -130,7 +130,7 @@ const DEFAULT_CONFIG: StoreConfig = {
 };
 
 const CATEGORIES = [
-  'Tênis', 'Chuteira', 'Chinelo', 'Camisa de Time', 'Conjunto Dryfit', 'Primeira Linha', 'Infantil'
+  'Tênis', 'Chuteira', 'Chinelo', 'Camisas', 'Conjunto Dryfit', 'Primeira Linha', 'Infantil'
 ];
 
 const GENDERS = ['Masculino', 'Feminino', 'Unisex'];
@@ -386,7 +386,19 @@ export default function App() {
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesSection = currentSection === 'all' || p.gender === currentSection || p.gender === 'Unisex' || !p.gender;
-      const matchesCat = currentFilter === 'all' || p.cat === currentFilter;
+      
+      let matchesCat = currentFilter === 'all' || p.cat === currentFilter;
+      
+      // Broad matching for Camisas category
+      const isShirtCat = (c: string) => {
+        const lower = c.toLowerCase();
+        return lower.includes('camisa') || lower.includes('conjunto') || lower.includes('dryfit') || lower === 'camisas';
+      };
+
+      if (currentFilter === 'Camisas') {
+        matchesCat = isShirtCat(p.cat);
+      }
+      
       const matchesSubCat = currentSubCat === 'all' || p.subCat === currentSubCat;
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             p.cat.toLowerCase().includes(searchQuery.toLowerCase());
@@ -648,7 +660,7 @@ export default function App() {
                >
                  <Menu size={22} />
                </button>
-               <button onClick={() => { setCurrentFilter('all'); setCurrentSection('all'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="flex items-center gap-3 group transition-transform">
+               <button onClick={() => { setCurrentFilter('all'); setCurrentSection('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="flex items-center gap-3 group transition-transform">
                  <div className="w-10 h-10 relative shrink-0">
                    <img 
                       src="https://dcdn-us.mitiendanube.com/stores/007/557/906/themes/common/logo-3496612179248405264-1776098643-0c2a0da76c2c3e0a22df20d1c9b471f51776098643-640-0.webp" 
@@ -696,7 +708,7 @@ export default function App() {
       </header>
 
       {/* Main Content Areas */}
-      {currentSection === 'all' && (
+      {currentSection === 'all' && currentFilter === 'all' && currentSubCat === 'all' && !searchQuery && (
         <>
           {/* Central Products Menu (Main Navigation Hub) */}
           <div className="bg-gradient-to-r from-bg via-[#2E86C1] to-bg py-10 shadow-[0_10px_50px_-15px_rgba(46,134,193,0.4)] border-y border-white/5 mt-8 mb-4 relative overflow-hidden group">
@@ -851,14 +863,14 @@ export default function App() {
                     <span className="text-[10px] font-black tracking-widest uppercase">Esporte</span>
                   </div>
                   <button 
-                    onClick={() => { setCurrentFilter('Camisa de Time'); setCurrentSubCat('all'); }}
+                    onClick={() => { setCurrentFilter('Camisas'); setCurrentSubCat('all'); }}
                     className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-yellow-400 transition-colors"
                   >
                     CAMISAS
                   </button>
                   <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
-                     <button onClick={() => { setCurrentFilter('Camisa de Time'); setCurrentSubCat('all'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
-                       <span>Times</span>
+                     <button onClick={() => { setCurrentFilter('Camisas'); setCurrentSubCat('all'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Ver Todos</span>
                        <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
                      </button>
                   </div>
@@ -1001,7 +1013,7 @@ export default function App() {
       )}
 
       {/* Catalog */}
-      {currentSection !== 'all' && (
+      {(currentSection !== 'all' || currentFilter !== 'all' || currentSubCat !== 'all' || searchQuery) && (
         <main id="catalog" className="max-w-[1400px] mx-auto px-6 py-12">
           {currentFilter === 'all' && !searchQuery ? (
             <div className="space-y-20">
@@ -1031,7 +1043,10 @@ export default function App() {
                   <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">CAMISAS</h2>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {products.filter(p => (p.cat === 'Camisa de Time' || p.cat === 'Conjunto Dryfit')).map(p => (
+                  {products.filter(p => {
+                    const lowerCat = p.cat.toLowerCase();
+                    return lowerCat.includes('camisa') || lowerCat.includes('conjunto') || lowerCat.includes('dryfit') || lowerCat === 'camisas';
+                  }).map(p => (
                     <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
                   ))}
                 </div>
@@ -1107,7 +1122,7 @@ export default function App() {
               <div className="text-center py-20 bg-bg2 rounded-3xl border border-dashed border-border">
                 <Search className="mx-auto text-muted mb-4 opacity-30" size={48} />
                 <div className="text-muted text-lg">Nenhum produto encontrado para sua busca</div>
-                <button onClick={() => { setSearchQuery(''); setCurrentFilter('all'); }} className="mt-4 text-cyan text-sm underline">Limpar filtros</button>
+                <button onClick={() => { setSearchQuery(''); setCurrentFilter('all'); setCurrentSubCat('all'); }} className="mt-4 text-cyan text-sm underline">Limpar filtros</button>
               </div>
             )}
           </>

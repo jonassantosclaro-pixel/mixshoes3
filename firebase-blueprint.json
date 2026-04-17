@@ -6,7 +6,9 @@
       "type": "object",
       "properties": {
         "name": { "type": "string", "description": "Product name" },
-        "cat": { "type": "string", "description": "Category (Masculino, Feminino, etc.)" },
+        "cat": { "type": "string", "description": "Category (Tênis, Chuteira, etc.)" },
+        "subCat": { "type": "string", "description": "Sub-category (34 ao 39, etc.)" },
+        "gender": { "type": "string", "description": "Gender (Masculino, Feminino, Unisex)" },
         "price": { "type": "number", "description": "Selling price" },
         "priceOld": { "type": "number", "description": "Original price for discount display" },
         "sizes": { "type": "array", "items": { "type": "string" }, "description": "Available numeric sizes" },
