@@ -75,6 +75,7 @@ interface Product {
   id: string;
   name: string;
   cat: string;
+  subCat?: string;
   gender: 'Masculino' | 'Feminino' | 'Unisex';
   price: number;
   priceOld: number;
@@ -133,6 +134,7 @@ const CATEGORIES = [
 ];
 
 const GENDERS = ['Masculino', 'Feminino', 'Unisex'];
+const SUB_CATEGORIES = ['Nenhuma', '34 ao 39', '39 ao 43', 'INFANTIL'];
 
 // --- Components ---
 interface ProductCardProps {
@@ -223,23 +225,19 @@ export default function App() {
 
     try {
       const prompt = `Você é um assistente virtual da loja MIX SHOES. 
-      Seu objetivo é ajudar clientes a encontrar produtos, tirar dúvidas e direcionar para os contatos oficiais.
+      Sua função principal é ser simples e direto, auxiliando o cliente e direcionando para os canais oficiais de atendimento.
       
       DADOS DA LOJA:
       Nome: ${config.storeName}
-      Endereço: ${config.address}
       WhatsApp: ${config.whatsapp}
       Instagram: ${config.instagram}
       Facebook: ${config.facebook}
       
-      PRODUTOS DISPONÍVEIS:
-      ${products.map(p => `${p.name} - R$ ${p.price} (${p.cat})`).join('\n')}
-      
       INSTRUÇÕES:
-      - Seja amigável e use emojis de tênis e moda.
-      - Se o cliente quiser comprar, direcione-o para adicionar ao carrinho ou para o WhatsApp.
-      - Responda de forma curta e objetiva.
-      - Nunca invente preços ou produtos que não estão na lista acima.
+      - Responda em UMA ou DUAS frases no máximo.
+      - Seja amigável e use emojis 👟.
+      - Se o cliente perguntar sobre produtos ou compras, diga que os botões abaixo ou o link do WhatsApp são os melhores canais.
+      - Se ele quiser falar com um humano, mande-o para o WhatsApp.
       
       MENSAGEM DO CLIENTE: ${text}`;
 
@@ -261,6 +259,7 @@ export default function App() {
   // --- UI State ---
   const [currentSection, setCurrentSection] = useState<'all' | 'Masculino' | 'Feminino'>('all');
   const [currentFilter, setCurrentFilter] = useState('all');
+  const [currentSubCat, setCurrentSubCat] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -388,11 +387,12 @@ export default function App() {
     return products.filter(p => {
       const matchesSection = currentSection === 'all' || p.gender === currentSection || p.gender === 'Unisex' || !p.gender;
       const matchesCat = currentFilter === 'all' || p.cat === currentFilter;
+      const matchesSubCat = currentSubCat === 'all' || p.subCat === currentSubCat;
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             p.cat.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSection && matchesCat && matchesSearch;
+      return matchesSection && matchesCat && matchesSubCat && matchesSearch;
     });
-  }, [products, currentSection, currentFilter, searchQuery]);
+  }, [products, currentSection, currentFilter, currentSubCat, searchQuery]);
 
   const cartTotal = useMemo(() => cart.reduce((acc, item) => acc + (item.preco * item.quantidade), 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((acc, item) => acc + item.quantidade, 0), [cart]);
@@ -635,115 +635,326 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className={`h-[72px] sticky top-0 z-50 border-b border-border transition-all ${scrolled ? 'bg-bg/95 backdrop-blur-md h-[64px]' : 'bg-bg/90 backdrop-blur-sm'}`}>
-        <div className="max-w-[1400px] mx-auto px-6 h-full flex items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-             <button 
-               onClick={() => setIsMenuOpen(true)}
-               className="p-2 border border-border rounded-lg text-white hover:border-cyan hover:text-cyan transition-all"
-             >
-               <Menu size={20} />
-             </button>
-             <button onClick={() => { setCurrentFilter('all'); setCurrentSection('all'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="flex items-center gap-3 active:scale-95 transition-transform overflow-hidden">
-               <div className="w-12 h-12 relative shrink-0">
-                 <img 
-                    src="https://dcdn-us.mitiendanube.com/stores/007/557/906/themes/common/logo-3496612179248405264-1776098643-0c2a0da76c2c3e0a22df20d1c9b471f51776098643-640-0.webp" 
-                    alt="Logo" 
-                    className="w-full h-full object-contain brightness-110"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = "https://picsum.photos/seed/mixshoes/100/100";
-                    }}
-                 />
-               </div>
-               <div className="font-bebas text-2xl tracking-wider flex gap-1">
-                 <span className="text-cyan">MIX</span>
-                 <span className="text-orange">SHOES</span>
-               </div>
-             </button>
-          </div>
+      <header 
+        className="sticky top-0 z-50 transition-all font-sans"
+      >
+        {/* Logo and Search Bar Section (Main Header) */}
+        <div className={`transition-all bg-bg/95 border-b border-white/5 ${scrolled ? 'py-1.5' : 'py-3'}`}>
+          <div className="max-w-[1400px] mx-auto px-6 flex items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+               <button 
+                 onClick={() => setIsMenuOpen(true)}
+                 className="p-2 border border-border rounded-lg text-white hover:border-cyan hover:text-cyan transition-all md:hidden"
+               >
+                 <Menu size={22} />
+               </button>
+               <button onClick={() => { setCurrentFilter('all'); setCurrentSection('all'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="flex items-center gap-3 group transition-transform">
+                 <div className="w-10 h-10 relative shrink-0">
+                   <img 
+                      src="https://dcdn-us.mitiendanube.com/stores/007/557/906/themes/common/logo-3496612179248405264-1776098643-0c2a0da76c2c3e0a22df20d1c9b471f51776098643-640-0.webp" 
+                      alt="Logo" 
+                      className="w-full h-full object-contain brightness-110 group-hover:scale-110 transition-transform"
+                      referrerPolicy="no-referrer"
+                   />
+                 </div>
+                 <div className="font-bebas text-xl tracking-wider flex gap-1">
+                   <span className="text-cyan text-shadow-cyan">MIX</span>
+                   <span className="text-orange text-shadow-orange">SHOES</span>
+                 </div>
+               </button>
+            </div>
 
-          <div className="hidden md:flex flex-1 max-w-xl relative">
-            <input 
-              type="text" 
-              placeholder="Buscar tênis, sneakers, lançamentos..."
-              className="w-full bg-bg3 border border-border rounded-full py-2.5 px-6 pr-12 text-sm focus:border-cyan outline-none transition-all focus:ring-4 focus:ring-cyan/10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-muted" size={18} />
-          </div>
+            <div className="hidden lg:flex flex-1 max-w-xl relative mx-8">
+              <input 
+                type="text" 
+                placeholder="Buscar produtos..."
+                className="w-full bg-bg3 border border-border rounded-full py-2 px-6 pr-12 text-sm focus:border-cyan outline-none transition-all placeholder:text-muted/50"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-muted/50" size={18} />
+            </div>
 
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setCartOpen(true)}
-              className="bg-cyan text-black px-5 py-2 rounded-full font-bold text-sm flex items-center gap-2 shadow-[0_0_20px_rgba(0,200,255,0.4)] hover:shadow-[0_0_30px_rgba(0,200,255,0.6)] hover:-translate-y-0.5 transition-all"
-            >
-              <ShoppingCart size={18} />
-              <span className="hidden sm:inline">Carrinho</span>
-              <span className="bg-black text-orange rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">{cartCount}</span>
-            </button>
-            <button 
-              onClick={() => isAdminMode ? setAdminPanelOpen(true) : setIsAdminMode(true)}
-              className="p-2.5 border border-border rounded-full text-muted hover:border-cyan hover:text-cyan transition-all"
-            >
-              <Settings size={18} />
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setCartOpen(true)}
+                className="bg-cyan text-black px-4 py-2 rounded-full font-bold text-xs flex items-center gap-2 shadow-[0_0_20px_rgba(0,200,255,0.3)] hover:shadow-[0_0_30px_rgba(0,200,255,0.5)] transition-all active:scale-95"
+              >
+                <ShoppingCart size={18} />
+                <span className="hidden sm:inline uppercase">Carrinho</span>
+                <span className="bg-black text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">{cartCount}</span>
+              </button>
+              <button 
+                onClick={() => isAdminMode ? setAdminPanelOpen(true) : setIsAdminMode(true)}
+                className="p-2.5 border border-border rounded-full text-muted hover:border-cyan hover:text-cyan transition-all group"
+              >
+                <Settings size={18} className="group-hover:rotate-45 transition-transform duration-500" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content Areas */}
       {currentSection === 'all' && (
-        <section className="max-w-[1400px] mx-auto px-6 py-6">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-16"
-          >
-            <h2 className="font-bebas text-6xl md:text-8xl tracking-tight mb-4">ESCOLHA SEU <span className="text-cyan">ESTILO</span></h2>
-            <p className="text-muted uppercase tracking-[0.3em] font-bold">O melhor da moda esportiva e premium do Brasil</p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 min-h-[600px]">
-            {['Masculino', 'Feminino'].map((sec, idx) => (
-              <motion.button
-                key={sec}
-                initial={{ opacity: 0, x: idx === 0 ? -50 : 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  setCurrentSection(sec as any);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="relative group overflow-hidden rounded-[3rem] border border-white/5 bg-[#0A0C10]"
-              >
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10" />
-                <img 
-                  src={sec === 'Masculino' ? 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=2070&auto=format&fit=crop' : 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?q=80&w=1974&auto=format&fit=crop'} 
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-all duration-700 group-hover:scale-110"
-                  alt={sec}
-                  referrerPolicy="no-referrer"
-                />
+        <>
+          {/* Central Products Menu (Main Navigation Hub) */}
+          <div className="bg-gradient-to-r from-bg via-[#2E86C1] to-bg py-10 shadow-[0_10px_50px_-15px_rgba(46,134,193,0.4)] border-y border-white/5 mt-8 mb-4 relative overflow-hidden group">
+            {/* Dynamic Light Sweep */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.05] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-[3000ms] ease-out" />
+            
+            <div className="max-w-[1400px] mx-auto flex flex-col items-center justify-center relative z-10 px-6">
+              <div className="flex items-center gap-8 w-full">
+                <div className="hidden md:block flex-1 h-[2px] bg-gradient-to-r from-transparent via-white/10 to-white/30 rounded-full" />
                 
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-12 text-center">
-                  <div className="bg-white/10 backdrop-blur-md border border-white/10 px-6 py-2 rounded-full text-[10px] font-black tracking-[0.2em] mb-4 opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0">
-                    EXPLORAR COLEÇÃO
-                  </div>
-                  <h3 className="font-bebas text-7xl md:text-9xl tracking-wider text-white mb-2 leading-none uppercase">
-                    {sec === 'Masculino' ? 'MASCULINO' : 'FEMININO'}
-                  </h3>
-                  <div className="text-cyan font-black text-xl tracking-[0.2em]">R$:68,00</div>
+                <div className="relative group/text">
+                  {/* Subtle Glow */}
+                  <div className="absolute inset-0 bg-white/20 blur-3xl opacity-0 group-hover/text:opacity-40 transition-opacity duration-1000" />
+                  
+                  <h2 className="relative font-bebas text-5xl md:text-8xl tracking-[0.15em] uppercase text-white leading-none drop-shadow-[0_5px_15px_rgba(0,0,0,0.3)]">
+                    PRO<span className="text-cyan drop-shadow-[0_0_20px_rgba(34,211,238,0.5)]">DUTOS</span>
+                  </h2>
+                  
+                  {/* Dynamic Underline */}
+                  <div className="h-1 w-0 group-hover:w-full bg-cyan mx-auto transition-all duration-700 shadow-[0_0_10px_#00ffff]" />
                 </div>
 
-                <div className="absolute top-8 right-8 z-20 w-16 h-16 bg-white flex items-center justify-center rounded-full text-black transform rotate-45 group-hover:rotate-0 transition-all duration-500">
-                  <ArrowUpRight size={32} />
-                </div>
-              </motion.button>
-            ))}
+                <div className="hidden md:block flex-1 h-[2px] bg-gradient-to-l from-transparent via-white/10 to-white/30 rounded-full" />
+              </div>
+              
+              <div className="mt-4 flex items-center gap-4">
+                <div className="h-px w-8 bg-cyan/40" />
+                <span className="text-[10px] font-black uppercase tracking-[0.5em] text-cyan/70">Coleção Premium 2026</span>
+                <div className="h-px w-8 bg-cyan/40" />
+              </div>
+            </div>
           </div>
-        </section>
+
+          <section className="relative py-16 overflow-hidden">
+            {/* Elegant Background Accents */}
+            <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyan/5 blur-[120px] rounded-full" />
+            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-orange/5 blur-[120px] rounded-full" />
+            
+            <div className="max-w-[1400px] mx-auto px-10 relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                 {/* Masculino */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-cyan/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-cyan mb-2">
+                    <div className="p-2 bg-cyan/10 rounded-lg"><ShoppingBag size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Premium</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentSection('Masculino'); setCurrentFilter('all'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-cyan transition-colors"
+                  >
+                    MASCULINO
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentSection('Masculino'); setCurrentFilter('Tênis'); setCurrentSubCat('34 ao 39'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>34 ao 39</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                     <button onClick={() => { setCurrentSection('Masculino'); setCurrentFilter('Tênis'); setCurrentSubCat('39 ao 43'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>39 ao 43</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Feminino */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-pink-500/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-pink-500 mb-2">
+                    <div className="p-2 bg-pink-500/10 rounded-lg"><Sparkles size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Estilo</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentSection('Feminino'); setCurrentFilter('all'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-pink-500 transition-colors"
+                  >
+                    FEMININO
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentSection('Feminino'); setCurrentFilter('all'); setCurrentSubCat('all'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Ver Mais</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Chuteira */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-green/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-green mb-2">
+                    <div className="p-2 bg-green/10 rounded-lg"><Check size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Performance</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentFilter('Chuteira'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-green transition-colors"
+                  >
+                    CHUTEIRAS
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentFilter('Chuteira'); setCurrentSubCat('34 ao 39'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>34 ao 39</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                     <button onClick={() => { setCurrentFilter('Chuteira'); setCurrentSubCat('39 ao 43'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>39 ao 43</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Chinelo */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-orange/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-orange mb-2">
+                    <div className="p-2 bg-orange/10 rounded-lg"><Sparkles size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Conforto</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentFilter('Chinelo'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-orange transition-colors"
+                  >
+                    CHINELOS
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentFilter('Chinelo'); setCurrentSubCat('34 ao 39'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>34 ao 39</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                     <button onClick={() => { setCurrentFilter('Chinelo'); setCurrentSubCat('39 ao 43'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>39 ao 43</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Camisas */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-yellow-400/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-yellow-400 mb-2">
+                    <div className="p-2 bg-yellow-400/10 rounded-lg"><Shirt size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Esporte</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentFilter('Camisa de Time'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-yellow-400 transition-colors"
+                  >
+                    CAMISAS
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentFilter('Camisa de Time'); setCurrentSubCat('all'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Times</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Conjunto Dry-Fit */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-blue-400/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-blue-400 mb-2">
+                    <div className="p-2 bg-blue-400/10 rounded-lg"><Activity size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Tecnologia</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentFilter('Conjunto Dryfit'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-blue-400 transition-colors"
+                  >
+                    CONJUNTO DRY-FIT
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentFilter('Conjunto Dryfit'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Ver Coleção</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Premium */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-cyan/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-cyan mb-2">
+                    <div className="p-2 bg-cyan/10 rounded-lg"><Sparkles size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Premium</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentFilter('Primeira Linha'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-cyan transition-colors"
+                  >
+                    1 ª LINHA
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentSection('Masculino'); setCurrentFilter('Primeira Linha'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Masculino</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                     <button onClick={() => { setCurrentSection('Feminino'); setCurrentFilter('Primeira Linha'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Feminino</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+
+                 {/* Infantil */}
+                 <motion.div 
+                   whileHover={{ y: -5 }}
+                   className="flex flex-col gap-6 p-6 rounded-3xl bg-white/[0.02] border border-white/5 backdrop-blur-sm hover:bg-white/[0.05] hover:border-purple-500/30 transition-all duration-500 group"
+                 >
+                  <div className="flex items-center gap-3 text-purple-500 mb-2">
+                    <div className="p-2 bg-purple-500/10 rounded-lg"><Baby size={18} /></div>
+                    <span className="text-[10px] font-black tracking-widest uppercase">Kids</span>
+                  </div>
+                  <button 
+                    onClick={() => { setCurrentFilter('Infantil'); setCurrentSubCat('all'); }}
+                    className="font-bebas text-3xl tracking-wider text-left text-white group-hover:text-purple-500 transition-colors"
+                  >
+                    INFANTIL
+                  </button>
+                  <div className="flex flex-col gap-3 text-muted font-medium border-t border-white/5 pt-4">
+                     <button onClick={() => { setCurrentSection('Masculino'); setCurrentFilter('Infantil'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Masculino</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                     <button onClick={() => { setCurrentSection('Feminino'); setCurrentFilter('Infantil'); }} className="text-[13px] hover:text-white flex items-center justify-between group/item">
+                       <span>Feminino</span>
+                       <ChevronRight size={14} className="opacity-0 group-hover/item:opacity-100 -translate-x-2 group-hover/item:translate-x-0 transition-all" />
+                     </button>
+                  </div>
+                 </motion.div>
+              </div>
+            </div>
+          </section>
+
+          <section className="max-w-[1400px] mx-auto px-6 py-20">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center"
+            >
+              <h2 className="font-bebas text-6xl md:text-8xl tracking-tight mb-4">CONFIRA AS <span className="text-cyan text-shadow-cyan">NOVIDADES</span></h2>
+              <p className="text-muted uppercase tracking-[0.3em] font-bold">O melhor da moda esportiva e premium do Brasil</p>
+            </motion.div>
+          </section>
+        </>
       )}
 
       {/* Mode View: Submenus / Categories Grid */}
@@ -765,7 +976,7 @@ export default function App() {
                { id: 'Tênis', label: currentSection === 'Masculino' ? 'Tênis/Chuteira 68' : 'Tênis 68', icon: <ShoppingBag size={30} />, price: 'R$:68,00' },
                { id: 'Camisas', label: 'Camisas', icon: <Shirt size={30} />, price: 'Diversos' },
                { id: 'Chinelo', label: 'Chinelos', icon: <Check size={30} />, price: 'R$:68,00' },
-               { id: 'Primeira Linha', label: 'Primeira Linha', icon: <Sparkles size={30} />, price: '+ R$:68,00' },
+               { id: 'Primeira Linha', label: '1 ª Linha', icon: <Sparkles size={30} />, price: '+ R$:68,00' },
                { id: 'Infantil', label: 'Infantil', icon: <Baby size={30} />, price: 'R$:68,00' }
              ].map((group, idx) => (
                <motion.button
@@ -773,7 +984,7 @@ export default function App() {
                  initial={{ opacity: 0, y: 20 }}
                  animate={{ opacity: 1, y: 0 }}
                  transition={{ delay: idx * 0.05 }}
-                 onClick={() => setCurrentFilter(group.id as any)}
+                 onClick={() => { setCurrentFilter(group.id as any); setCurrentSubCat('all'); }}
                  className="flex flex-col items-center gap-4 p-6 bg-bg2 border border-border rounded-[2rem] hover:border-cyan/50 hover:bg-cyan/5 transition-all group"
                >
                  <div className="w-16 h-16 bg-bg border border-border rounded-2xl flex items-center justify-center text-muted group-hover:text-cyan group-hover:border-cyan/30 transition-all">
@@ -926,7 +1137,7 @@ export default function App() {
             <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Categorias</h4>
             <ul className="space-y-3 text-sm text-muted">
               {CATEGORIES.map(c => (
-                <li key={c}><button onClick={() => setCurrentFilter(c)} className="hover:text-cyan transition-colors">👟 {c}</button></li>
+                <li key={c}><button onClick={() => { setCurrentFilter(c); setCurrentSubCat('all'); }} className="hover:text-cyan transition-colors">👟 {c}</button></li>
               ))}
             </ul>
           </div>
@@ -1005,6 +1216,29 @@ export default function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex flex-wrap gap-2 mb-4">
+                 <a 
+                   href={`https://wa.me/${config.whatsapp.replace(/\D/g, '')}`} 
+                   target="_blank"
+                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green/10 border border-green/20 rounded-xl text-green text-[10px] font-black uppercase tracking-wider hover:bg-green hover:text-white transition-all"
+                 >
+                   <MessageCircle size={14} /> WhatsApp
+                 </a>
+                 <a 
+                   href={config.instagram} 
+                   target="_blank"
+                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-pink-500/10 border border-pink-500/20 rounded-xl text-pink-500 text-[10px] font-black uppercase tracking-wider hover:bg-pink-500 hover:text-white transition-all"
+                 >
+                   <Instagram size={14} /> Instagram
+                 </a>
+                 <a 
+                   href={config.facebook} 
+                   target="_blank"
+                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-500 text-[10px] font-black uppercase tracking-wider hover:bg-blue-500 hover:text-white transition-all"
+                 >
+                   <Facebook size={14} /> Facebook
+                 </a>
+              </div>
               {chatMessages.map((m, i) => (
                 <motion.div 
                   initial={{ opacity: 0, x: m.role === 'user' ? 10 : -10 }}
@@ -1036,6 +1270,7 @@ export default function App() {
             <div className="p-6 bg-bg3 border-t border-border">
               <div className="relative">
                 <input 
+                  id="chatInput"
                   type="text" 
                   placeholder="Pergunte sobre um tênis..."
                   onKeyDown={(e) => {
@@ -1048,7 +1283,15 @@ export default function App() {
                   className="w-full bg-bg border border-border rounded-2xl py-4 pl-6 pr-14 text-sm outline-none focus:border-cyan transition-all"
                 />
                 <button 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-cyan text-black rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all hover:bg-white"
+                  disabled={isTyping}
+                  onClick={() => {
+                    const input = document.getElementById('chatInput') as HTMLInputElement;
+                    if (input && input.value.trim()) {
+                      handleSendMessage(input.value);
+                      input.value = '';
+                    }
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-cyan text-black rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all hover:bg-white disabled:opacity-50"
                 >
                   <Send size={18} />
                 </button>
@@ -2023,6 +2266,12 @@ export default function App() {
                    </select>
                  </div>
                  <div>
+                   <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Grade (Sub-Cat)</label>
+                   <select id="pSubCat" defaultValue={editingProduct?.subCat || 'Nenhuma'} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan appearance-none">
+                      {SUB_CATEGORIES.map(s => <option key={s} value={s}>{s}</option>)}
+                   </select>
+                 </div>
+                 <div>
                    <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Preço (R$)</label>
                    <input id="pPrice" type="number" defaultValue={editingProduct?.price || ''} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
                  </div>
@@ -2053,6 +2302,7 @@ export default function App() {
                       name: (document.getElementById('pName') as HTMLInputElement).value,
                       gender: (document.getElementById('pGender') as HTMLSelectElement).value,
                       cat: (document.getElementById('pCat') as HTMLSelectElement).value,
+                      subCat: (document.getElementById('pSubCat') as HTMLSelectElement).value,
                       price: Number((document.getElementById('pPrice') as HTMLInputElement).value),
                       img: (document.getElementById('pImg') as HTMLInputElement).value,
                       stock: Number((document.getElementById('pStock') as HTMLInputElement).value),
