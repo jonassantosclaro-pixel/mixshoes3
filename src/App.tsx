@@ -974,7 +974,7 @@ export default function App() {
         <section className="max-w-[1400px] mx-auto px-6 py-12">
           <div className="flex items-center justify-between mb-12">
             <button 
-              onClick={() => setCurrentSection('all')}
+              onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }}
               className="flex items-center gap-2 text-muted hover:text-white transition-all text-xs font-black uppercase tracking-widest"
             >
               <ChevronLeft size={16} /> Voltar para o Início
@@ -1096,12 +1096,12 @@ export default function App() {
             <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
               <div className="flex flex-col">
                 <div className="flex items-center gap-3 mb-2">
-                  {currentFilter !== 'all' && !searchQuery && (
+                  {(currentFilter !== 'all' || currentSubCat !== 'all') && !searchQuery && (
                     <button 
-                      onClick={() => setCurrentFilter('all')}
+                      onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }}
                       className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-cyan hover:text-white transition-all bg-cyan/10 px-3 py-1 rounded-full border border-cyan/20"
                     >
-                      <ChevronLeft size={12} /> Voltar
+                      <ChevronLeft size={12} /> Voltar ao Início
                     </button>
                   )}
                   <h2 className="text-2xl font-black tracking-tight uppercase tracking-[0.1em]">{searchQuery ? `Resultado para "${searchQuery}"` : currentFilter}</h2>
@@ -1122,7 +1122,7 @@ export default function App() {
               <div className="text-center py-20 bg-bg2 rounded-3xl border border-dashed border-border">
                 <Search className="mx-auto text-muted mb-4 opacity-30" size={48} />
                 <div className="text-muted text-lg">Nenhum produto encontrado para sua busca</div>
-                <button onClick={() => { setSearchQuery(''); setCurrentFilter('all'); setCurrentSubCat('all'); }} className="mt-4 text-cyan text-sm underline">Limpar filtros</button>
+                <button onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="mt-4 text-cyan text-sm underline">Limpar filtros e Voltar ao Início</button>
               </div>
             )}
           </>
