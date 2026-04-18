@@ -291,8 +291,8 @@ export default function App() {
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      // If user is jonas, grant admin access automatically if they sign in via Google
-      if (u?.email === 'jonassantosclaro@gmail.com') {
+      // If user is authorized, grant admin access automatically
+      if (u?.email === 'jonassantosclaro@gmail.com' || u?.email === 'admin@mixshoes.com') {
         setIsAdminMode(true);
       }
     });
@@ -527,8 +527,7 @@ export default function App() {
       setCartOpen(false);
       showToast('✅ Pedido enviado!');
     } catch(e) {
-      console.error(e);
-      showToast('❌ Erro ao processar pedido');
+      handleFirestoreError(e, OperationType.CREATE, 'orders');
     }
   };
 
@@ -969,52 +968,34 @@ export default function App() {
         </>
       )}
 
-      {/* Mode View: Submenus / Categories Grid */}
-      {currentSection !== 'all' && currentFilter === 'all' && !searchQuery && (
-        <section className="max-w-[1400px] mx-auto px-6 py-12">
-          <div className="flex items-center justify-between mb-12">
-            <button 
-              onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-              className="flex items-center gap-2 text-muted hover:text-white transition-all text-xs font-black uppercase tracking-widest"
-            >
-              <ChevronLeft size={16} /> Voltar para o Início
-            </button>
-            <div className="h-px flex-1 mx-8 bg-border" />
-            <h2 className="font-bebas text-4xl tracking-widest">SUB-CATEGORIAS <span className="text-cyan">{currentSection.toUpperCase()}</span></h2>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-             {[
-               { id: 'Tênis', label: currentSection === 'Masculino' ? 'Tênis/Chuteira 68' : 'Tênis 68', icon: <ShoppingBag size={30} />, price: 'R$:68,00' },
-               { id: 'Camisas', label: 'Camisas', icon: <Shirt size={30} />, price: 'Diversos' },
-               { id: 'Chinelo', label: 'Chinelos', icon: <Check size={30} />, price: 'R$:68,00' },
-               { id: 'Primeira Linha', label: '1 ª Linha', icon: <Sparkles size={30} />, price: '+ R$:68,00' },
-               { id: 'Infantil', label: 'Infantil', icon: <Baby size={30} />, price: 'R$:68,00' }
-             ].map((group, idx) => (
-               <motion.button
-                 key={group.id}
-                 initial={{ opacity: 0, y: 20 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 transition={{ delay: idx * 0.05 }}
-                 onClick={() => { setCurrentFilter(group.id as any); setCurrentSubCat('all'); }}
-                 className="flex flex-col items-center gap-4 p-6 bg-bg2 border border-border rounded-[2rem] hover:border-cyan/50 hover:bg-cyan/5 transition-all group"
-               >
-                 <div className="w-16 h-16 bg-bg border border-border rounded-2xl flex items-center justify-center text-muted group-hover:text-cyan group-hover:border-cyan/30 transition-all">
-                    {group.icon}
-                 </div>
-                 <div className="text-[10px] font-black uppercase tracking-widest text-center">
-                    {group.label}<br />
-                    <span className="text-cyan">{group.price}</span>
-                 </div>
-               </motion.button>
-             ))}
-          </div>
-        </section>
-      )}
-
-      {/* Catalog */}
+      {/* Catalog & Dynamic Selection Grids */}
       {(currentSection !== 'all' || currentFilter !== 'all' || currentSubCat !== 'all' || searchQuery) && (
         <main id="catalog" className="max-w-[1400px] mx-auto px-6 py-12">
+          
+          {/* Standard Navigation Header - Applied to ALL views except Home Hub */}
+          <div className="flex flex-col mb-12">
+            <div className="flex items-center gap-4 mb-4">
+              <button 
+                onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-cyan hover:text-white transition-all bg-cyan/10 px-4 py-2 rounded-full border border-cyan/20 group"
+              >
+                <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Voltar ao Início
+              </button>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-baseline justify-between gap-4">
+              <h2 className="font-bebas text-5xl md:text-7xl tracking-widest text-white uppercase">
+                {searchQuery ? 'BUSCA' : (currentFilter !== 'all' ? currentFilter : currentSection)}
+                {searchQuery && <span className="text-cyan ml-4 opacity-50 text-4xl">"{searchQuery}"</span>}
+                {currentSubCat !== 'all' && currentSubCat !== 'Nenhuma' && <span className="text-cyan ml-4 opacity-50 text-4xl">{currentSubCat}</span>}
+              </h2>
+              <span className="text-muted text-[10px] sm:text-xs uppercase tracking-[0.3em] font-black bg-white/5 px-4 py-1 rounded-full border border-white/5">
+                {filteredProducts.length} PRODUTOS ENCONTRADOS
+              </span>
+            </div>
+          </div>
+
           {currentFilter === 'all' && !searchQuery ? (
             <div className="space-y-20">
               {/* Promo Section (68 Masc / 58 Fem) */}
@@ -1093,23 +1074,6 @@ export default function App() {
             </div>
           ) : (
           <>
-            <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-3 mb-2">
-                  {(currentFilter !== 'all' || currentSubCat !== 'all') && !searchQuery && (
-                    <button 
-                      onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-                      className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-cyan hover:text-white transition-all bg-cyan/10 px-3 py-1 rounded-full border border-cyan/20"
-                    >
-                      <ChevronLeft size={12} /> Voltar ao Início
-                    </button>
-                  )}
-                  <h2 className="text-2xl font-black tracking-tight uppercase tracking-[0.1em]">{searchQuery ? `Resultado para "${searchQuery}"` : currentFilter}</h2>
-                </div>
-                <span className="text-muted text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold">{filteredProducts.length} produtos encontrados</span>
-              </div>
-            </div>
-
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
               <AnimatePresence mode="popLayout">
                 {filteredProducts.map(p => (
@@ -1740,9 +1704,18 @@ export default function App() {
                   </div>
                   <h2 className="font-bebas text-4xl mb-2">PAINEL DE CONTROLE</h2>
                   <p className="text-muted text-sm mb-10">Mix Shoes — Área Administrativa</p>
-                  <div className="space-y-4">
-                    <input id="admU" type="text" placeholder="Usuário" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
-                    <input id="admP" type="password" placeholder="Senha" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="text-left">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Usuário</label>
+                        <input id="admU" type="text" placeholder="mixshoes" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan transition-all" />
+                      </div>
+                      <div className="text-left">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Senha</label>
+                        <input id="admP" type="password" placeholder="••••••••" className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan transition-all" />
+                      </div>
+                    </div>
+
                     <button 
                       onClick={async () => {
                         const u = (document.getElementById('admU') as HTMLInputElement).value;
@@ -1750,43 +1723,36 @@ export default function App() {
                         
                         if(!u || !p) { showToast('⚠️ Digite usuário e senha'); return; }
                         
-                        // Transform simple user to email for Firebase
+                        // Map requested credentials to Firebase Auth email
+                        // username 'mixshoes' -> 'admin@mixshoes.com'
                         const email = u === 'mixshoes' ? 'admin@mixshoes.com' : `${u}@mixshoes.com`;
                         
                         showToast('🔐 Autenticando...');
                         try {
-                          // Try log in
                           await signInWithEmailAndPassword(auth, email, p);
                           setAdminPanelOpen(true);
                           showToast('✅ Acesso Liberado!');
                         } catch(err: any) {
-                          console.error("Firebase Auth Error:", err.code, err.message);
+                          console.error("Firebase Auth Error:", err.code);
                           
-                          // Handle disabled provider
                           if (err.code === 'auth/operation-not-allowed') {
-                            showToast('🚫 O login por E-mail/Senha deve ser ativado no Console!');
-                            return;
-                          }
-
-                          // If user not found, attempt to register (first access)
-                          if(err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-                            try {
-                               await createUserWithEmailAndPassword(auth, email, p);
-                               setAdminPanelOpen(true);
-                               showToast('✅ Conta Admin Criada e logada!');
-                            } catch(creationErr: any) {
-                               if (creationErr.code === 'auth/email-already-in-use') {
-                                 showToast('❌ Senha incorreta para este usuário');
-                               } else if (creationErr.code === 'auth/operation-not-allowed') {
-                                 showToast('🚀 Ative "E-mail/Senha" no Firebase Console!');
-                               } else if (creationErr.code === 'auth/weak-password') {
-                                 showToast('❌ Senha muito fraca (mínimo 6 caracteres)');
-                               } else {
-                                 showToast('❌ Erro: ' + creationErr.code);
-                               }
+                            showToast('🚀 Ative "E-mail/Senha" no Console Firebase!');
+                          } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+                            // First time setup attempt if credentials match requested
+                            if (u === 'mixshoes' && p === 'adminmixshoes') {
+                              showToast('🔄 Criando conta admin inicial...');
+                              try {
+                                await createUserWithEmailAndPassword(auth, email, p);
+                                setAdminPanelOpen(true);
+                                showToast('✅ Conta Criada e Autenticada!');
+                              } catch(ce: any) {
+                                showToast('❌ Erro na criação: ' + ce.code);
+                              }
+                            } else {
+                              showToast('❌ Usuário ou senha incorretos');
                             }
                           } else {
-                            showToast('❌ Erro de autenticação: ' + err.code);
+                            showToast('❌ Erro: ' + err.code);
                           }
                         }
                       }}
@@ -1794,7 +1760,31 @@ export default function App() {
                     >
                       Acessar Painel
                     </button>
-                    <button onClick={() => setIsAdminMode(false)} className="text-muted text-xs underline mt-6">Voltar para Loja</button>
+
+                    <div className="flex items-center gap-4 py-2">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-[10px] text-muted font-black">OU</span>
+                        <div className="h-px flex-1 bg-border" />
+                    </div>
+
+                    <button 
+                      onClick={async () => {
+                        showToast('🔐 Conectando com Google...');
+                        const provider = new GoogleAuthProvider();
+                        try {
+                          await signInWithPopup(auth, provider);
+                          setAdminPanelOpen(true);
+                          showToast('✅ Login realizado!');
+                        } catch (err: any) {
+                          showToast('❌ Erro no Google Login');
+                        }
+                      }}
+                      className="w-full bg-bg3 border border-border text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
+                    >
+                      <UserIcon size={14} /> Login com Google
+                    </button>
+                    
+                    <button onClick={() => setIsAdminMode(false)} className="text-muted text-xs underline mt-4 block mx-auto">Voltar para Loja</button>
                   </div>
                </motion.div>
              ) : (
@@ -2113,7 +2103,7 @@ export default function App() {
                                                     });
                                                     setCart([]);
                                                     showToast('✅ Venda registrada e estoque atualizado!');
-                                                } catch(e) { showToast('❌ Erro na atualização'); }
+                                                } catch(e) { handleFirestoreError(e, OperationType.UPDATE, 'pdv/venda'); }
                                             }}
                                             className="w-full bg-cyan text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest disabled:opacity-20 transition-all flex items-center justify-center gap-3"
                                         >
@@ -2135,7 +2125,13 @@ export default function App() {
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <button 
-                                                onClick={() => setDoc(doc(db, 'products', p.id), { ...p, stock: p.stock + 1 })}
+                                                onClick={async () => {
+                                                  try {
+                                                    await setDoc(doc(db, 'products', p.id), { ...p, stock: p.stock + 1 });
+                                                  } catch(e) {
+                                                    handleFirestoreError(e, OperationType.UPDATE, `products/${p.id}`);
+                                                  }
+                                                }}
                                                 className="w-10 h-10 rounded-xl bg-orange/10 text-orange flex items-center justify-center hover:bg-orange hover:text-black transition-all"
                                             >
                                                 <Plus size={18} />
@@ -2238,7 +2234,9 @@ export default function App() {
                                     try {
                                         await setDoc(doc(db, 'config', 'main'), config);
                                         showToast('✅ Configurações Salvas!');
-                                    } catch(e) { showToast('❌ Erro ao salvar'); }
+                                    } catch(e) { 
+                                        handleFirestoreError(e, OperationType.UPDATE, 'config/main');
+                                    }
                                 }}
                                 className="mt-12 w-full bg-cyan text-black py-5 rounded-[1.5rem] font-black text-sm uppercase tracking-widest shadow-xl shadow-cyan/10 hover:shadow-cyan/20 transition-all flex items-center justify-center gap-3"
                             >
