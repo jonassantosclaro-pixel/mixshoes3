@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShoppingCart, Settings, Search, Phone, Instagram, Facebook, 
   Trash2, Plus, Minus, Check, X, LogOut, LayoutDashboard, 
-  Package, ShoppingBag, ClipboardList, Database, Globe,
+  Package, ShoppingBag, ClipboardList, Database, Globe, Layers, RefreshCw,
   ExternalLink, ArrowUpRight, Camera, Bot, Send, Sparkles, MessageCircle,
   Menu, ChevronRight, ChevronLeft, User as UserIcon,
   Zap, Shirt, Activity, Baby
@@ -80,6 +80,7 @@ interface Product {
   price: number;
   priceOld: number;
   sizes: string[];
+  sizeStock: { [size: string]: number };
   img: string;
   desc: string;
   stock: number;
@@ -130,11 +131,11 @@ const DEFAULT_CONFIG: StoreConfig = {
 };
 
 const CATEGORIES = [
-  'Tênis', 'Chuteira', 'Chinelo', 'Camisas', 'Conjunto Dryfit', 'Primeira Linha', 'Infantil'
+  'Tênis', 'Chuteira', 'Chinelo', 'Camisas', 'Conjunto Dryfit', 'Primeira Linha', 'Infantil', 'Feminino'
 ];
 
 const GENDERS = ['Masculino', 'Feminino', 'Unisex'];
-const SUB_CATEGORIES = ['Nenhuma', '34 ao 39', '39 ao 43', 'INFANTIL'];
+const SUB_CATEGORIES = ['Nenhuma', '34 ao 43', 'INFANTIL'];
 
 // --- Components ---
 interface ProductCardProps {
@@ -284,8 +285,17 @@ export default function App() {
   const [activeAdminTab, setActiveAdminTab] = useState('dashboard');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [modalSizeStock, setModalSizeStock] = useState<{ [size: string]: number }>({});
+  const [modalSizes, setModalSizes] = useState<string[]>([]);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+
+  const openProductModal = (p: Product | null) => {
+    setEditingProduct(p);
+    setModalSizeStock(p?.sizeStock || {});
+    setModalSizes(p?.sizes || ['34','35','36','37','38','39','40','41','42','43']);
+    setIsProductModalOpen(true);
+  };
 
   // --- Auth & Real-time Listeners ---
   useEffect(() => {
@@ -411,6 +421,11 @@ export default function App() {
       showToast('⚠️ Selecione um tamanho!');
       return;
     }
+    const available = p.sizeStock?.[size] || 0;
+    if (available <= 0) {
+      showToast(`❌ Tamanho ${size} esgotado!`);
+      return;
+    }
     const key = `${p.id}_${size}`;
     setCart(prev => {
       const ex = prev.find(item => item._key === key);
@@ -490,6 +505,22 @@ export default function App() {
     };
 
     try {
+      for (const item of cart) {
+        const p = products.find(prod => prod.id === item.produtoId);
+        if (p) {
+          const newSizeStock = { ...(p.sizeStock || {}) };
+          const currentSizeStock = newSizeStock[item.tamanho] || 0;
+          newSizeStock[item.tamanho] = Math.max(0, currentSizeStock - item.quantidade);
+          const totalStock = Object.values(newSizeStock).reduce((acc: number, curr: any) => acc + (Number(curr) || 0), 0);
+          
+          await setDoc(doc(db, 'products', p.id), {
+            ...p,
+            stock: totalStock,
+            sizeStock: newSizeStock,
+            vendas: (p.vendas || 0) + item.quantidade
+          });
+        }
+      }
       const docRef = await addDoc(collection(db, 'orders'), orderData);
       const orderUrl = `${window.location.origin}/?order=${docRef.id}`;
       
@@ -534,21 +565,181 @@ export default function App() {
       return;
     }
     showToast('🚀 Semeando dados...');
+    
+    const FULL_RANGE = ['34','35','36','37','38','39','40','41','42','43'];
+    const DEFAULT_STOCK_MAP = FULL_RANGE.reduce((acc, sz) => ({ ...acc, [sz]: 10 }), {});
+
     const SEED_PRODS = [
-      {name:'Mizuno Prophecy',cat:'Tênis',gender:'Masculino',price:68,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://picsum.photos/seed/mizuno/400/400',desc:'Mizuno Premium',stock:20,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Nike Shox TL',cat:'Tênis',gender:'Masculino',price:68,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://picsum.photos/seed/shox/400/400',desc:'Nike Shox 12 molas',stock:15,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Samba Adidas',cat:'Tênis',gender:'Feminino',price:68,priceOld:0,sizes:['34','35','36','37','38','39'],img:'https://picsum.photos/seed/samba/400/400',desc:'Estilo casual',stock:12,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Nike Chuteira Elite',cat:'Chuteira',gender:'Masculino',price:68,priceOld:0,sizes:['36','37','38','39','40','41','42','43'],img:'https://picsum.photos/seed/chuteira/400/400',desc:'Alta performance em campo',stock:10,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Chinelo Slide',cat:'Chinelo',gender:'Unisex',price:68,priceOld:0,sizes:['34','35','36','37','38','39', '40', '41', '42'],img:'https://picsum.photos/seed/slide/400/400',desc:'Conforto absoluto',stock:15,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Camisa Flamengo 2026',cat:'Camisa de Time',gender:'Masculino',price:99,priceOld:0,sizes:['P','M','G','GG'],img:'https://picsum.photos/seed/flamengo/400/400',desc:'Manto Sagrado',stock:20,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Conjunto Nike Dryfit Black',cat:'Conjunto Dryfit',gender:'Masculino',price:85,priceOld:0,sizes:['P','M','G','GG'],img:'https://picsum.photos/seed/dryfit/400/400',desc:'Conjunto para treino',stock:18,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Air Jordan 1 High',cat:'Primeira Linha',gender:'Unisex',price:150,priceOld:0,sizes:['38','39','40','41','42','43'],img:'https://picsum.photos/seed/jordan/400/400',desc:'Colecionador',stock:5,vendas:0,novo:true,createdAt: Date.now()},
-      {name:'Boneco Infantil Nike',cat:'Infantil',gender:'Unisex',price:68,priceOld:0,sizes:['28','29','30','31','32','33'],img:'https://picsum.photos/seed/kids/400/400',desc:'Para os pequenos',stock:25,vendas:0,novo:true,createdAt: Date.now()},
+      {
+        name:'Mizuno Prophecy',
+        cat:'Tênis',
+        gender:'Masculino',
+        price:68,
+        priceOld:0,
+        sizes: FULL_RANGE,
+        sizeStock: DEFAULT_STOCK_MAP,
+        img:'https://picsum.photos/seed/mizuno/400/400',
+        desc:'Mizuno Premium',
+        stock: 100,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Nike Shox TL',
+        cat:'Tênis',
+        gender:'Masculino',
+        price:68,
+        priceOld:0,
+        sizes: FULL_RANGE,
+        sizeStock: DEFAULT_STOCK_MAP,
+        img:'https://picsum.photos/seed/shox/400/400',
+        desc:'Nike Shox 12 molas',
+        stock: 100,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Samba Adidas',
+        cat:'Feminino',
+        gender:'Feminino',
+        price:68,
+        priceOld:0,
+        sizes: FULL_RANGE,
+        sizeStock: DEFAULT_STOCK_MAP,
+        img:'https://picsum.photos/seed/samba/400/400',
+        desc:'Estilo casual',
+        stock: 100,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Nike Chuteira Elite',
+        cat:'Chuteira',
+        gender:'Masculino',
+        price:68,
+        priceOld:0,
+        sizes: FULL_RANGE,
+        sizeStock: DEFAULT_STOCK_MAP,
+        img:'https://picsum.photos/seed/chuteira/400/400',
+        desc:'Alta performance em campo',
+        stock: 100,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Chinelo Slide',
+        cat:'Chinelo',
+        gender:'Unisex',
+        price:68,
+        priceOld:0,
+        sizes: FULL_RANGE,
+        sizeStock: DEFAULT_STOCK_MAP,
+        img:'https://picsum.photos/seed/slide/400/400',
+        desc:'Conforto absoluto',
+        stock: 100,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Camisa Flamengo 2026',
+        cat:'Camisas',
+        gender:'Masculino',
+        price:99,
+        priceOld:0,
+        sizes:['P','M','G','GG'],
+        sizeStock:{'P':10,'M':10,'G':10,'GG':10},
+        img:'https://picsum.photos/seed/flamengo/400/400',
+        desc:'Manto Sagrado',
+        stock: 40,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Conjunto Nike Dryfit Black',
+        cat:'Conjunto Dryfit',
+        gender:'Masculino',
+        price:85,
+        priceOld:0,
+        sizes:['P','M','G','GG'],
+        sizeStock:{'P':10,'M':10,'G':10,'GG':10},
+        img:'https://picsum.photos/seed/dryfit/400/400',
+        desc:'Conjunto para treino',
+        stock: 40,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Air Jordan 1 High',
+        cat:'Primeira Linha',
+        gender:'Unisex',
+        price:150,
+        priceOld:0,
+        sizes: FULL_RANGE,
+        sizeStock: DEFAULT_STOCK_MAP,
+        img:'https://picsum.photos/seed/jordan/400/400',
+        desc:'Colecionador',
+        stock: 100,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
+      {
+        name:'Nike Infantil Joy',
+        cat:'Infantil',
+        gender:'Unisex',
+        price:68,
+        priceOld:0,
+        sizes: ['28','29','30','31','32','33'],
+        sizeStock: {'28':10,'29':10,'30':10,'31':10,'32':10,'33':10},
+        img:'https://picsum.photos/seed/kids/400/400',
+        desc:'Para os pequenos',
+        stock: 60,
+        vendas:0,
+        novo:true,
+        createdAt: Date.now()
+      },
     ];
     for (const p of SEED_PRODS) {
       await addDoc(collection(db, 'products'), p);
     }
     showToast('✅ Dados importados!');
+  };
+
+  const syncGlobalSizes = async () => {
+    const FULL_RANGE = ['34','35','36','37','38','39','40','41','42','43'];
+    showToast('🔄 Sincronizando grade global...');
+    try {
+        let count = 0;
+        for (const p of products) {
+            // Apply only to footwear/applicable categories if needed, 
+            // but the user said "todos os itens"
+            if (p.cat === 'Camisas' || p.cat === 'Conjunto Dryfit') continue; 
+
+            const currentSizes = p.sizes || [];
+            const needsUpdate = FULL_RANGE.some(s => !currentSizes.includes(s));
+            
+            if (needsUpdate || !p.sizeStock) {
+                const newSizes = [...new Set([...currentSizes, ...FULL_RANGE])].sort((a,b) => Number(a) - Number(b));
+                const newSizeStock = { ...(p.sizeStock || {}) };
+                FULL_RANGE.forEach(s => {
+                    if (newSizeStock[s] === undefined) newSizeStock[s] = 0;
+                });
+                const totalStock = Object.values(newSizeStock).reduce((acc: number, curr: any) => acc + (Number(curr) || 0), 0);
+                await setDoc(doc(db, 'products', p.id), { ...p, sizes: newSizes, sizeStock: newSizeStock, stock: totalStock });
+                count++;
+            }
+        }
+        showToast(`✅ Grade 34-43 aplicada em ${count} produtos!`);
+    } catch (e) {
+        handleFirestoreError(e, OperationType.UPDATE, 'batch/sync-sizes');
+    }
   };
 
   const handleAdminLogin = async (u: string, s: string) => {
@@ -1257,15 +1448,25 @@ export default function App() {
                 <div className="mb-8">
                   <div className="text-[10px] font-black uppercase tracking-widest text-muted mb-4">Escolha o seu tamanho:</div>
                   <div className="flex flex-wrap gap-2">
-                    {selectedProduct.sizes.map(s => (
-                      <button 
-                        key={s}
-                        onClick={() => setSelectedSize(s)}
-                        className={`w-14 h-14 rounded-2xl border-2 font-black transition-all ${selectedSize === s ? 'bg-cyan/10 border-cyan text-cyan' : 'bg-bg2 border-border hover:border-cyan/50'}`}
-                      >
-                        {s}
-                      </button>
-                    ))}
+                    {selectedProduct.sizes.map(s => {
+                      const isOutOfStock = (selectedProduct.sizeStock?.[s] || 0) <= 0;
+                      return (
+                        <button 
+                          key={s}
+                          disabled={isOutOfStock}
+                          onClick={() => setSelectedSize(s)}
+                          className={`w-14 h-14 rounded-2xl border-2 font-black transition-all ${
+                            selectedSize === s 
+                              ? 'bg-cyan/10 border-cyan text-cyan' 
+                              : isOutOfStock 
+                                ? 'bg-bg opacity-20 border-border cursor-not-allowed line-through' 
+                                : 'bg-bg2 border-border hover:border-cyan/50'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1696,7 +1897,7 @@ export default function App() {
              ) : (
                <motion.div className="w-full flex flex-col max-w-7xl mx-auto">
                  <div className="flex items-center justify-between py-6 border-b border-border mb-10">
-                   <div className="font-bebas text-4xl">PAINEL <span className="text-cyan">MIX SHOES</span></div>
+                    <div className="font-bebas text-4xl">PAINEL <span className="text-cyan">MIX SHOES</span></div>
                    <div className="flex items-center gap-4">
                      <span className="text-[10px] text-green font-black uppercase tracking-widest">🔥 ONLINE</span>
                       <button 
@@ -1716,6 +1917,8 @@ export default function App() {
                     {[
                       {id: 'dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard'},
                       {id: 'products', icon: <Package size={18} />, label: 'Produtos'},
+                      {id: 'inventory', icon: <Database size={18} />, label: 'Inventário'},
+                      {id: 'cat-mgmt', icon: <Layers size={18} />, label: 'Categorias'},
                       {id: 'pdv', icon: <ShoppingBag size={18} />, label: 'PDV / Estoque'},
                       {id: 'orders', icon: <ClipboardList size={18} />, label: 'Pedidos'},
                       {id: 'import', icon: <Globe size={18} />, label: 'Importar'},
@@ -1782,6 +1985,106 @@ export default function App() {
                      </div>
                    )}
 
+                   {activeAdminTab === 'inventory' && (
+                     <div className="space-y-6 animate-in fade-in duration-500">
+                        <div className="bg-bg3 border border-border p-8 rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-6">
+                           <div>
+                              <h2 className="font-bebas text-3xl mb-1 italic text-cyan">📦 CONTROLE DE INVENTÁRIO</h2>
+                              <p className="text-muted text-[10px] font-black uppercase tracking-widest">Ajuste rápido de estoque por numeração</p>
+                           </div>
+                           <button 
+                               onClick={syncGlobalSizes}
+                               className="bg-bg border border-border px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest text-cyan hover:bg-cyan hover:text-black transition-all flex items-center gap-2 group"
+                           >
+                               <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
+                               Aplicar Grade 34-43 em Todos
+                           </button>
+                        </div>
+                        <div className="bg-bg3 border border-border rounded-[2.5rem] overflow-hidden">
+                           <table className="w-full text-left">
+                              <thead className="bg-bg2 border-b border-border">
+                                 <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">
+                                    <th className="p-8">Produto (Referência)</th>
+                                    <th className="p-8">Variações</th>
+                                    <th className="p-8 text-center">Ações Rápidas</th>
+                                 </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/30">
+                                 {products.map(p => (
+                                   <tr key={p.id} className="hover:bg-cyan/[0.02] transition-colors group">
+                                      <td className="p-8 w-[400px]">
+                                         <div className="flex items-center gap-6">
+                                            <img src={p.img} referrerPolicy="no-referrer" className="w-16 h-16 rounded-2xl object-cover border border-border shadow-inner" />
+                                            <div className="min-w-0">
+                                               <div className="font-black text-base truncate mb-1 text-white uppercase">{p.name}</div>
+                                               <div className="text-[10px] text-muted font-black uppercase tracking-widest">{p.cat} | Total {p.stock}</div>
+                                            </div>
+                                         </div>
+                                      </td>
+                                      <td className="p-8">
+                                         <div className="flex flex-wrap gap-4 text-white font-bold">
+                                            {p.sizes.map(size => (
+                                               <div key={size} className="flex items-center gap-2">
+                                                  <span className="text-[10px] font-black text-muted tracking-widest uppercase">{size}:</span>
+                                                  <input type="number" id={`iv2-${p.id}-${size}`} defaultValue={p.sizeStock?.[size] || 0} className="w-16 bg-bg border border-border rounded-xl px-2 py-1.5 text-xs text-center focus:border-cyan outline-none" />
+                                               </div>
+                                            ))}
+                                         </div>
+                                      </td>
+                                      <td className="p-8 text-center">
+                                         <button 
+                                           onClick={async () => {
+                                             const updatedSS = { ...(p.sizeStock || {}) };
+                                             p.sizes.forEach(sz => {
+                                               const inp = document.getElementById(`iv2-${p.id}-${sz}`) as HTMLInputElement;
+                                               if(inp) updatedSS[sz] = Number(inp.value);
+                                             });
+                                             const tot = Object.values(updatedSS).reduce((ac: number, cur: any) => ac + (Number(cur) || 0), 0);
+                                             showToast('💾 Sincronizando...');
+                                             try {
+                                               await setDoc(doc(db, 'products', p.id), { ...p, sizeStock: updatedSS, stock: tot });
+                                               showToast('✅ Inventário Atualizado!');
+                                             } catch(e) { handleFirestoreError(e, OperationType.UPDATE, `inv/${p.id}`); }
+                                           }}
+                                           className="bg-cyan text-black px-6 py-2 rounded-xl font-black text-[10px] uppercase shadow-lg shadow-cyan/10 hover:brightness-110 active:scale-95 transition-all"
+                                         >
+                                           Salvar Item
+                                         </button>
+                                      </td>
+                                   </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
+                     </div>
+                   )}
+
+                   {activeAdminTab === 'cat-mgmt' && (
+                      <div className="space-y-10 animate-in fade-in duration-500">
+                         <div className="bg-bg3 border border-border p-10 rounded-[2.5rem]">
+                            <h2 className="font-bebas text-5xl mb-2 text-white italic tracking-wider uppercase">🏷️ DEPARTAMENTOS</h2>
+                            <p className="text-muted text-[10px] font-black uppercase tracking-[0.2em] ml-1">Gerencie os departamentos da sua vitrina</p>
+                         </div>
+                         <div className="grid lg:grid-cols-3 gap-6">
+                            {CATEGORIES.map(cat => (
+                               <div key={cat} className="bg-bg3 border border-border p-10 rounded-[3rem] flex flex-col justify-between hover:border-cyan transition-all cursor-pointer shadow-lg group">
+                                  <div className="flex items-center gap-6 mb-8 relative z-10">
+                                     <div className="w-16 h-16 bg-bg border border-border rounded-[1.5rem] flex items-center justify-center text-cyan group-hover:bg-cyan group-hover:text-black transition-all text-2xl shadow-inner"><Layers size={24} /></div>
+                                     <div>
+                                        <div className="font-bebas text-3xl uppercase tracking-wider text-white">{cat}</div>
+                                        <div className="text-[10px] text-muted font-black uppercase tracking-widest">{products.filter(p => p.cat === cat).length} Produtos</div>
+                                     </div>
+                                  </div>
+                                  <div className="flex gap-2 relative z-10">
+                                     <button className="flex-1 py-4 bg-bg2 border border-border rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-muted hover:text-white transition-all">Editar</button>
+                                     <button className="p-4 bg-bg2 border border-border rounded-2xl text-red hover:bg-red hover:text-white transition-all"><Trash2 size={20} /></button>
+                                  </div>
+                               </div>
+                            ))}
+                         </div>
+                      </div>
+                   )}
+
                    {activeAdminTab === 'products' && (
                      <div className="space-y-6">
                         <div className="flex justify-between items-center">
@@ -1816,7 +2119,7 @@ export default function App() {
                                    <td className="p-6">
                                      <div className="flex gap-2">
                                        <button 
-                                          onClick={() => { setEditingProduct(p); setIsProductModalOpen(true); }}
+                                          onClick={() => openProductModal(p)}
                                           className="p-2.5 bg-bg border border-border rounded-xl text-muted hover:text-cyan transition-all"
                                        >
                                           <Settings size={14} />
@@ -1997,9 +2300,15 @@ export default function App() {
                                                     for (const item of cart) {
                                                         const p = products.find(prod => prod.id === item.produtoId);
                                                         if (p) {
+                                                            const newSizeStock = { ...(p.sizeStock || {}) };
+                                                            const currentSizeStock = newSizeStock[item.tamanho] || 0;
+                                                            newSizeStock[item.tamanho] = Math.max(0, currentSizeStock - item.quantidade);
+                                                            const totalStock = Object.values(newSizeStock).reduce((acc: number, curr: any) => acc + (Number(curr) || 0), 0);
+
                                                             await setDoc(doc(db, 'products', p.id), {
                                                                 ...p,
-                                                                stock: Math.max(0, p.stock - item.quantidade),
+                                                                stock: totalStock,
+                                                                sizeStock: newSizeStock,
                                                                 vendas: (p.vendas || 0) + item.quantidade
                                                             });
                                                         }
@@ -2207,13 +2516,75 @@ export default function App() {
                    <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">URL da Imagem</label>
                    <input id="pImg" type="text" defaultValue={editingProduct?.img || ''} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
                  </div>
-                 <div>
-                   <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Quantidade em Estoque</label>
-                   <input id="pStock" type="number" defaultValue={editingProduct?.stock ?? 10} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
-                 </div>
-                 <div>
-                   <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Tamanhos (ex: 38,39,40)</label>
-                   <input id="pSizes" type="text" defaultValue={editingProduct?.sizes.join(',') || '38,39,40,41,42'} className="w-full bg-bg3 border border-border rounded-2xl px-6 py-4 outline-none focus:border-cyan" />
+                 <div className="sm:col-span-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Tamanhos e Estoque Individual</label>
+                   <div className="bg-bg3 border border-border rounded-2xl p-6 space-y-4">
+                      <div className="flex gap-2 mb-4">
+                         <input 
+                           type="text" 
+                           id="newSize"
+                           placeholder="Adicionar tamanho (ex: 44)" 
+                           className="flex-1 bg-bg border border-border rounded-xl px-4 py-2 outline-none focus:border-cyan text-sm"
+                           onKeyDown={(e) => {
+                             if(e.key === 'Enter') {
+                               const val = (e.target as HTMLInputElement).value.trim();
+                               if(val && !modalSizes.includes(val)) {
+                                 setModalSizes([...modalSizes, val]);
+                                 (e.target as HTMLInputElement).value = '';
+                               }
+                             }
+                           }}
+                         />
+                         <button 
+                           type="button"
+                           onClick={() => {
+                             const input = document.getElementById('newSize') as HTMLInputElement;
+                             const val = input.value.trim();
+                             if(val && !modalSizes.includes(val)) {
+                               setModalSizes([...modalSizes, val]);
+                               input.value = '';
+                             }
+                           }}
+                           className="bg-cyan text-black px-4 py-2 rounded-xl font-bold text-xs"
+                         >
+                           +
+                         </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                         {modalSizes.map(size => (
+                           <div key={size} className="bg-bg rounded-2xl border border-border p-3 flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                 <span className="text-xs font-black text-cyan">TAM: {size}</span>
+                                 <button 
+                                   type="button"
+                                   onClick={() => {
+                                     setModalSizes(modalSizes.filter(s => s !== size));
+                                     const newStock = {...modalSizeStock};
+                                     delete newStock[size];
+                                     setModalSizeStock(newStock);
+                                   }}
+                                   className="text-red hover:bg-red/10 p-1 rounded"
+                                 >
+                                   <X size={12} />
+                                 </button>
+                              </div>
+                              <input 
+                                type="number"
+                                placeholder="Qtd"
+                                value={modalSizeStock[size] || 0}
+                                onChange={(e) => {
+                                  setModalSizeStock({
+                                    ...modalSizeStock,
+                                    [size]: Number(e.target.value)
+                                  });
+                                }}
+                                className="w-full bg-bg3 border border-border rounded-lg px-3 py-2 outline-none focus:border-cyan text-xs"
+                              />
+                           </div>
+                         ))}
+                      </div>
+                   </div>
                  </div>
                  <div className="sm:col-span-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-muted block ml-2 mb-2">Descrição</label>
@@ -2226,6 +2597,7 @@ export default function App() {
                       showToast('⚠️ Entre com Google para salvar no Firebase');
                       return;
                    }
+                   const totalStock = Object.values(modalSizeStock).reduce((acc: number, curr: any) => acc + (Number(curr) || 0), 0);
                    const data = {
                       name: (document.getElementById('pName') as HTMLInputElement).value,
                       gender: (document.getElementById('pGender') as HTMLSelectElement).value,
@@ -2233,8 +2605,9 @@ export default function App() {
                       subCat: (document.getElementById('pSubCat') as HTMLSelectElement).value,
                       price: Number((document.getElementById('pPrice') as HTMLInputElement).value),
                       img: (document.getElementById('pImg') as HTMLInputElement).value,
-                      stock: Number((document.getElementById('pStock') as HTMLInputElement).value),
-                      sizes: (document.getElementById('pSizes') as HTMLInputElement).value.split(',').map(s=>s.trim()),
+                      stock: totalStock,
+                      sizeStock: modalSizeStock,
+                      sizes: modalSizes,
                       desc: (document.getElementById('pDesc') as HTMLTextAreaElement).value,
                       priceOld: 0,
                       vendas: editingProduct?.vendas || 0,
