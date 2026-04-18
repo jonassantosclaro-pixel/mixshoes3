@@ -692,12 +692,7 @@ export default function App() {
                 <span className="bg-black text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">{cartCount}</span>
               </button>
               <button 
-                onClick={() => {
-                  setIsAdminMode(true);
-                  if (user?.email === 'jonassantosclaro@gmail.com' || user?.email === 'admin@mixshoes.com') {
-                    setAdminPanelOpen(true);
-                  }
-                }}
+                onClick={() => setIsAdminMode(true)}
                 className="p-2.5 border border-border rounded-full text-muted hover:border-cyan hover:text-cyan transition-all group"
               >
                 <Settings size={18} className="group-hover:rotate-45 transition-transform duration-500" />
@@ -1208,12 +1203,7 @@ export default function App() {
       <div className="max-w-[1400px] mx-auto px-6 pt-10 border-t border-border flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] text-muted uppercase tracking-[0.2em] font-bold">
           <span>© 2026 Mix Shoes. Todos os direitos reservados.</span>
           <button 
-            onClick={() => {
-              setIsAdminMode(true);
-              if (user?.email === 'jonassantosclaro@gmail.com' || user?.email === 'admin@mixshoes.com') {
-                setAdminPanelOpen(true);
-              }
-            }} 
+            onClick={() => setIsAdminMode(true)} 
             className="opacity-30 hover:opacity-100 transition-opacity"
           >
             Área Administrativa
@@ -1501,13 +1491,10 @@ export default function App() {
 
                {/* Footer of Menu */}
                <div className="p-4 border-t border-gray-50 flex items-center justify-center gap-4 text-gray-400">
-                 <button 
+                <button 
                   onClick={() => { 
                     setIsMenuOpen(false); 
                     setIsAdminMode(true); 
-                    if (user?.email === 'jonassantosclaro@gmail.com' || user?.email === 'admin@mixshoes.com') {
-                      setAdminPanelOpen(true);
-                    }
                   }} 
                   className="flex items-center gap-2 text-xs hover:text-[#0088cc]"
                 >
@@ -1712,7 +1699,16 @@ export default function App() {
                    <div className="font-bebas text-4xl">PAINEL <span className="text-cyan">MIX SHOES</span></div>
                    <div className="flex items-center gap-4">
                      <span className="text-[10px] text-green font-black uppercase tracking-widest">🔥 ONLINE</span>
-                     <button onClick={() => { setAdminPanelOpen(false); setIsAdminMode(false); }} className="bg-bg3 border border-border px-6 py-3 rounded-full text-xs font-bold hover:bg-white/5 transition-all">Sair</button>
+                      <button 
+                       onClick={async () => {
+                         await signOut(auth);
+                         setAdminPanelOpen(false); 
+                         setIsAdminMode(false); 
+                       }} 
+                       className="bg-bg3 border border-border px-6 py-3 rounded-full text-xs font-bold hover:bg-white/5 transition-all"
+                     >
+                       Sair
+                     </button>
                    </div>
                  </div>
 
