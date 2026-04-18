@@ -291,10 +291,6 @@ export default function App() {
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      // If user is authorized, grant admin access automatically
-      if (u?.email === 'jonassantosclaro@gmail.com' || u?.email === 'admin@mixshoes.com') {
-        setIsAdminMode(true);
-      }
     });
 
     const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
@@ -696,7 +692,12 @@ export default function App() {
                 <span className="bg-black text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-black">{cartCount}</span>
               </button>
               <button 
-                onClick={() => isAdminMode ? setAdminPanelOpen(true) : setIsAdminMode(true)}
+                onClick={() => {
+                  setIsAdminMode(true);
+                  if (user?.email === 'jonassantosclaro@gmail.com' || user?.email === 'admin@mixshoes.com') {
+                    setAdminPanelOpen(true);
+                  }
+                }}
                 className="p-2.5 border border-border rounded-full text-muted hover:border-cyan hover:text-cyan transition-all group"
               >
                 <Settings size={18} className="group-hover:rotate-45 transition-transform duration-500" />
@@ -996,102 +997,22 @@ export default function App() {
             </div>
           </div>
 
-          {currentFilter === 'all' && !searchQuery ? (
-            <div className="space-y-20">
-              {/* Promo Section (68 Masc / 58 Fem) */}
-              <section>
-                <div className="flex items-center gap-4 mb-12">
-                  <div className="h-12 w-2 bg-cyan shadow-[0_0_20px_rgba(0,255,255,0.5)]"></div>
-                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white underline decoration-cyan/30 underline-offset-8">
-                    {currentSection.toUpperCase()} R$:68,00
-                  </h2>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {products.filter(p => 
-                    (p.cat === 'Tênis' || p.cat === 'Chuteira') && 
-                    p.gender === currentSection && 
-                    p.price <= 68
-                  ).map(p => (
-                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
-                  ))}
-                </div>
-              </section>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+            <AnimatePresence mode="popLayout">
+              {filteredProducts.map(p => (
+                <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
+              ))}
+            </AnimatePresence>
+          </div>
 
-              {/* Camisas Area */}
-              <section>
-                <div className="flex items-center gap-4 mb-12">
-                  <div className="h-12 w-2 bg-orange shadow-[0_0_20px_rgba(255,140,0,0.5)]"></div>
-                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">CAMISAS</h2>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {products.filter(p => {
-                    const lowerCat = p.cat.toLowerCase();
-                    return lowerCat.includes('camisa') || lowerCat.includes('conjunto') || lowerCat.includes('dryfit') || lowerCat === 'camisas';
-                  }).map(p => (
-                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
-                  ))}
-                </div>
-              </section>
-
-              {/* Chinelos Area */}
-              <section>
-                <div className="flex items-center gap-4 mb-12">
-                  <div className="h-12 w-2 bg-yellow-400"></div>
-                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">CHINELOS</h2>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {products.filter(p => p.cat === 'Chinelo').map(p => (
-                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
-                  ))}
-                </div>
-              </section>
-
-              {/* Primeira Linha Area */}
-              <section>
-                <div className="flex items-center gap-4 mb-12">
-                  <div className="h-12 w-2 bg-purple-500"></div>
-                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">PRIMEIRA LINHA</h2>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {products.filter(p => p.price > 68 || p.cat === 'Primeira Linha').map(p => (
-                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
-                  ))}
-                </div>
-              </section>
-
-              {/* Infantil Area */}
-              <section>
-                <div className="flex items-center gap-4 mb-12">
-                  <div className="h-12 w-2 bg-pink-500"></div>
-                  <h2 className="text-6xl font-bebas tracking-[0.1em] text-white">INFANTIL</h2>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-                  {products.filter(p => p.cat === 'Infantil').map(p => (
-                    <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
-                  ))}
-                </div>
-              </section>
+          {filteredProducts.length === 0 && (
+            <div className="text-center py-20 bg-bg2 rounded-3xl border border-dashed border-border">
+              <Search className="mx-auto text-muted mb-4 opacity-30" size={48} />
+              <div className="text-muted text-lg">Nenhum produto encontrado para sua busca</div>
+              <button onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="mt-4 text-cyan text-sm underline">Limpar filtros e Voltar ao Início</button>
             </div>
-          ) : (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
-              <AnimatePresence mode="popLayout">
-                {filteredProducts.map(p => (
-                  <ProductCard key={p.id} p={p} addToCart={addToCart} setSelectedProduct={setSelectedProduct} />
-                ))}
-              </AnimatePresence>
-            </div>
-
-            {filteredProducts.length === 0 && (
-              <div className="text-center py-20 bg-bg2 rounded-3xl border border-dashed border-border">
-                <Search className="mx-auto text-muted mb-4 opacity-30" size={48} />
-                <div className="text-muted text-lg">Nenhum produto encontrado para sua busca</div>
-                <button onClick={() => { setCurrentSection('all'); setCurrentFilter('all'); setCurrentSubCat('all'); setSearchQuery(''); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="mt-4 text-cyan text-sm underline">Limpar filtros e Voltar ao Início</button>
-              </div>
-            )}
-          </>
-        )}
-      </main>
+          )}
+        </main>
       )}
 
       {/* Footer */}
@@ -1286,7 +1207,17 @@ export default function App() {
 
       <div className="max-w-[1400px] mx-auto px-6 pt-10 border-t border-border flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] text-muted uppercase tracking-[0.2em] font-bold">
           <span>© 2026 Mix Shoes. Todos os direitos reservados.</span>
-          <button onClick={() => setIsAdminMode(true)} className="opacity-30 hover:opacity-100 transition-opacity">Área Administrativa</button>
+          <button 
+            onClick={() => {
+              setIsAdminMode(true);
+              if (user?.email === 'jonassantosclaro@gmail.com' || user?.email === 'admin@mixshoes.com') {
+                setAdminPanelOpen(true);
+              }
+            }} 
+            className="opacity-30 hover:opacity-100 transition-opacity"
+          >
+            Área Administrativa
+          </button>
         </div>
       </footer>
 
@@ -1570,7 +1501,18 @@ export default function App() {
 
                {/* Footer of Menu */}
                <div className="p-4 border-t border-gray-50 flex items-center justify-center gap-4 text-gray-400">
-                 <button onClick={() => { setIsMenuOpen(false); setIsAdminMode(true); }} className="flex items-center gap-2 text-xs hover:text-[#0088cc]"><UserIcon size={14} /> Iniciar sessão</button>
+                 <button 
+                  onClick={() => { 
+                    setIsMenuOpen(false); 
+                    setIsAdminMode(true); 
+                    if (user?.email === 'jonassantosclaro@gmail.com' || user?.email === 'admin@mixshoes.com') {
+                      setAdminPanelOpen(true);
+                    }
+                  }} 
+                  className="flex items-center gap-2 text-xs hover:text-[#0088cc]"
+                >
+                  <UserIcon size={14} /> Iniciar sessão
+                </button>
                  <span className="text-gray-200">|</span>
                  <button className="text-xs hover:text-[#0088cc]">Criar uma conta</button>
                </div>
@@ -1759,29 +1701,6 @@ export default function App() {
                       className="w-full bg-cyan text-black py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-cyan/20 active:scale-95 transition-all"
                     >
                       Acessar Painel
-                    </button>
-
-                    <div className="flex items-center gap-4 py-2">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-[10px] text-muted font-black">OU</span>
-                        <div className="h-px flex-1 bg-border" />
-                    </div>
-
-                    <button 
-                      onClick={async () => {
-                        showToast('🔐 Conectando com Google...');
-                        const provider = new GoogleAuthProvider();
-                        try {
-                          await signInWithPopup(auth, provider);
-                          setAdminPanelOpen(true);
-                          showToast('✅ Login realizado!');
-                        } catch (err: any) {
-                          showToast('❌ Erro no Google Login');
-                        }
-                      }}
-                      className="w-full bg-bg3 border border-border text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
-                    >
-                      <UserIcon size={14} /> Login com Google
                     </button>
                     
                     <button onClick={() => setIsAdminMode(false)} className="text-muted text-xs underline mt-4 block mx-auto">Voltar para Loja</button>
